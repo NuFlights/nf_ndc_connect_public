@@ -1,13 +1,16 @@
 [package]
 name = "nf_ndc_connect_public"
-version = "0.2.1"
+version = "0.2.1" 
 edition = "2024"
+description = "Shared IDP Claims & Auth Logic for Rust, Python (Maturin), and Wasm (Wasm-Pack)"
+license = "MIT"
+repository = "https://github.com/NuFlights/nf_ndc_connect_public"
+# ---------------------------------------------
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
-# Default to neither to allow pure Rust usage
 default = []
 python = ["dep:pyo3"]
 wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen"]
@@ -20,3 +23,5 @@ wasm-bindgen = { version = "0.2.108", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
 jsonwebtoken = "10.2.0"
 chrono = "0.4.43"
+getrandom = { version = "0.2", features = ["js"] }
+# ----------------------------------------------------
