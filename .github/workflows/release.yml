@@ -28,33 +28,32 @@ jobs:
         run: cargo publish
 
   # ============================================================================
-  #  2. PYTHON (PYPI) - FUTURE PROOFED
+  #  2. PYTHON (PYPI) - TRUSTED PUBLISHING
   # ============================================================================
   publish-pypi:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # specific permission for trusted publishing (optional but recommended)
+      id-token: write  # <--- CRITICAL: This allows GitHub to generate the OIDC token
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      # Step 1: Build wheels and sdist
-      # We output them to the 'dist' folder so the next step finds them easily
+      # Step 1: Build Wheels
       - name: Build Wheels
         uses: messense/maturin-action@v1
         with:
           command: build
           args: --release --out dist --features python
           
-      # Step 2: Upload using the official PyPA action
-      # This replaces the deprecated 'maturin publish' command
+      # Step 2: Publish (No Password Needed)
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          packages_dir: dist/
-          
+          packages-dir: dist/
+          # verify-metadata: false # Uncomment if you ever have issues with metadata checks
+          # attestations: true     # Default is true, now valid since we have no password!
+                    
   # ============================================================================
   #  3. WASM / NODE (NPM)
   # ============================================================================
