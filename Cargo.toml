@@ -3,4 +3,20 @@ name = "nf_ndc_connect_public"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Default to neither to allow pure Rust usage
+default = []
+python = ["dep:pyo3"]
+wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen"]
+
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+pyo3 = { version = "0.27.2", features = ["extension-module"], optional = true }
+wasm-bindgen = { version = "0.2.108", optional = true }
+serde-wasm-bindgen = { version = "0.6.5", optional = true }
+jsonwebtoken = "10.2.0"
+chrono = "0.4.43"

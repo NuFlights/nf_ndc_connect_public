@@ -1,5 +1,5 @@
 {
-  description = "Casdoor Claims: Rust, Python (Maturin), and Wasm (Wasm-Pack) Workspace";
+  description = "IDP Claims: Rust, Python (Maturin), and Wasm (Wasm-Pack) Workspace";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -49,7 +49,8 @@
 
           shellHook = ''
             export PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
-            echo "🚀 Casdoor Claims Hybrid Environment Loaded"
+            source .venv/bin/activate
+            echo "🚀 IDP Claims Hybrid Environment Loaded"
             echo "-------------------------------------------"
             echo "Rust:   $(rustc --version)"
             echo "Python: $(python3 --version) | Maturin: $(maturin --version)"
@@ -62,7 +63,7 @@
         #  PACKAGE: Pure Rust Crate
         # ======================================================================
         packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "casdoor-claims";
+          pname = "nf_ndc_connect_public";
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Wasm IDP Auth Test</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 2rem;
+    }
+
+    .success {
+      color: #4caf50;
+    }
+
+    .fail {
+      color: #f44336;
+    }
+
+    .info {
+      color: #569cd6;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🦀 Rust Wasm IDP Auth Helper</h1>
+  <div id="output">Loading...</div>
+
+  <script type="module">
+    import init, {IdpAuthHelper} from './pkg/nf_auth_helper.js';
+
+    async function run() {
+      const out = document.getElementById("output");
+      const log = (msg, cls = "info") => {
+        const div = document.createElement("div");
+        div.innerHTML = msg;
+        div.className = cls;
+        out.appendChild(div);
+      };
+
+      try {
+        // 1. Initialize Wasm
+        await init();
+        out.innerHTML = "";
+
+        // 2. Load Public Key and JWT
+        // NOTE: Ensure cert.pem and jwt.txt are in your root folder
+        const [certRes, jwtRes] = await Promise.all([
+          fetch("./cert.pem"),
+          fetch("./jwt.txt")
+        ]);
+        const publicKey = await certRes.text();
+        const rawJwt = (await jwtRes.text()).trim();
+
+        // 3. Initialize Helper
+        log("🔐 Initializing Helper with Public Key...");
+        const helper = new IdpAuthHelper(publicKey);
+        log("✅ Helper Initialized", "success");
+
+        // 4. Validate JWT
+        const isValid = helper.isValid(rawJwt);
+        log(`🔹 isValid(JWT): <b>${isValid}</b>`, isValid ? "success" : "fail");
+
+        if (!isValid) return;
+
+        // 5. Fetch Auth Tree
+        const authTree = helper.getOrgAuthorisations(rawJwt);
+        log(`\n📂 <b>Auth Tree Fetched:</b>`);
+        authTree.forEach(org => {
+          log(`&nbsp;&nbsp;🏢 <b>Org:</b> ${org.org_name} [${org.org_id}]`);
+          org.roles.forEach(r => log(`&nbsp;&nbsp;&nbsp;&nbsp;🎭 <b>Role:</b> ${r.name}`));
+        });
+
+        // 6. Direct Capability Checks
+        const orgId = "dhilipsiva_dev/nf-apex";
+        const roleName = "nf-apex-adm";
+
+        const hasRole = helper.hasRole(rawJwt, orgId, roleName);
+        log(`\n🔹 hasRole('${orgId}', '${roleName}'): <b>${hasRole}</b>`, hasRole ? "success" : "fail");
+
+      } catch (e) {
+        console.error(e);
+        log(`❌ Error: ${e.message}`, "fail");
+      }
+    }
+
+    run();
+  </script>
+</body>
+
+</html>
