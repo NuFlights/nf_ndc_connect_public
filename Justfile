@@ -12,7 +12,7 @@ py-dev:
 
 # Build Python Wheel (Release)
 py-build:
-    maturin build --release --features python
+    maturin build --release --out dist --features python
 
 # Build Wasm Package (Node/Web)
 wasm:
