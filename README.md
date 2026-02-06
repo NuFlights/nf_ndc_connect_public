@@ -36,9 +36,24 @@ npm install @dhilipsiva/nf_ndc_connect_public
 
 ---
 
+## 🔑 Organization Context & Auto-Resolution
+
+**New in this version:** The `org_id` (Organization/Group ID) parameter is now **optional** when checking roles or permissions.
+
+* **Explicit Context:** If you provide an `org_id`, checks are performed strictly against that organization.
+* **Auto-Resolution:** If you omit `org_id` (pass `None` / `null`):
+* If the user belongs to **exactly one** organization, that organization is used automatically.
+* If the user belongs to **multiple** organizations (or zero), the function returns an **Error** (Ambiguous Context).
+
+
+
+---
+
 ## 🚀 Usage
 
 ### 🐍 Python Example
+
+In Python, passing `None` as the second argument triggers auto-resolution. If ambiguity exists, a `ValueError` is raised.
 
 ```python
 import nf_ndc_connect_public
@@ -55,12 +70,21 @@ raw_jwt = "eyJhbGciOiJ..."
 if helper.is_valid(raw_jwt):
     print("✅ JWT is valid!")
 
-    # 3. Check specific Roles or Permissions
+    # 3. Check Roles (Auto-Resolution)
+    # If the user is in exactly one Org, this works. 
+    # If they are in multiple, this raises ValueError.
+    try:
+        if helper.has_role(raw_jwt, None, "nf-apex-adm"):
+            print("User is an Admin (Default Org)!")
+    except ValueError as e:
+        print(f"⚠️ Ambiguous Context: {e}")
+
+    # 4. Check Roles (Explicit Context)
     org_id = "dhilipsiva_dev/nf-apex"
     if helper.has_role(raw_jwt, org_id, "nf-apex-adm"):
-        print("User is an Admin!")
+        print(f"User is an Admin in {org_id}!")
 
-    # 4. Get full authorization tree (returns JSON string)
+    # 5. Get full authorization tree (returns JSON string)
     tree_json = helper.get_org_authorisations(raw_jwt)
     print(json.loads(tree_json))
 else:
@@ -69,6 +93,8 @@ else:
 ```
 
 ### 📦 Node.js Example
+
+In JavaScript/TypeScript, passing `null` or `undefined` triggers auto-resolution. Ambiguity throws an `Error`.
 
 ```javascript
 const { IdpAuthHelper } = require("@dhilipsiva/nf_ndc_connect_public");
@@ -85,12 +111,21 @@ const isValid = helper.isValid(rawJwt);
 console.log(`Is Valid? ${isValid}`);
 
 if (isValid) {
-    // 3. Check Role
-    const hasRole = helper.hasRole(rawJwt, "dhilipsiva_dev/nf-apex", "nf-apex-adm");
-    console.log(`Has Admin Role? ${hasRole}`);
+    try {
+        // 3. Check Role (Auto-Resolution)
+        // Pass 'null' to attempt automatic org detection
+        const hasRoleDefault = helper.hasRole(rawJwt, null, "nf-apex-adm");
+        console.log(`Has Admin Role (Default Org)? ${hasRoleDefault}`);
+        
+    } catch (e) {
+        console.error("⚠️ Ambiguous Context:", e.message);
+    }
 
-    // 4. Get Auth Tree
-    // Returns a native JS object (not a string) in Node
+    // 4. Check Role (Explicit Context)
+    const hasRoleExplicit = helper.hasRole(rawJwt, "dhilipsiva_dev/nf-apex", "nf-apex-adm");
+    console.log(`Has Admin Role (Explicit)? ${hasRoleExplicit}`);
+
+    // 5. Get Auth Tree
     const tree = helper.getOrgAuthorisations(rawJwt);
     console.log(tree);
 }
@@ -98,6 +133,8 @@ if (isValid) {
 ```
 
 ### 🦀 Rust Example
+
+In Rust, the functions now accept `Option<&str>` and return a `Result<bool, String>`.
 
 ```rust
 use nf_ndc_connect_public::AuthHelper;
@@ -112,8 +149,20 @@ fn main() {
         Ok(claims) => {
             println!("✅ Valid Token for subject: {}", claims.sub);
             
-            if helper.has_role(jwt, "dhilipsiva_dev/nf-apex", "nf-apex-adm") {
-                println!("User is Admin");
+            // 3. Check Role (Explicit Context)
+            // We use .unwrap_or(false) here to treat Errors (ambiguity) as 'false', 
+            // but you can handle the Result explicitly if preferred.
+            let is_admin = helper.has_role(jwt, Some("dhilipsiva_dev/nf-apex"), "nf-apex-adm");
+            if is_admin.unwrap_or(false) {
+                 println!("User is Admin in specific Org");
+            }
+
+            // 4. Check Role (Auto-Resolution)
+            // Pass None to attempt automatic org detection
+            match helper.has_role(jwt, None, "nf-apex-adm") {
+                Ok(true) => println!("User is Admin (Default Org)"),
+                Ok(false) => println!("User is NOT Admin"),
+                Err(e) => println!("⚠️ Ambiguous Context: {}", e),
             }
         },
         Err(e) => println!("❌ Error: {}", e),
@@ -158,22 +207,27 @@ To publish a new version to PyPI, NPM, and Crates.io simultaneously:
 
 1. **Ensure you are in the Nix shell** (`nix develop`).
 2. **Run the release command:**
+
 ```bash
 # Usage: just release <version>
 just release 0.2.3
 
 ```
 
-
 This will:
+
 * Update `Cargo.toml` and `pyproject.toml`.
 * Run checks.
 * Commit the changes.
 * Create a git tag `v0.2.3`.
 
-
 3. **Push to trigger CI/CD:**
+
 ```bash
 git push && git push --tags
+
+```
+
+```
 
 ```
