@@ -1,6 +1,6 @@
 [package]
 name = "nf_ndc_connect_public"
-version = "0.3.3" 
+version = "0.4.0" 
 edition = "2024"
 description = "Shared IDP Claims & Auth Logic for Rust, Python (Maturin), and Wasm (Wasm-Pack)"
 license = "MIT"
