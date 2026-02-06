@@ -227,7 +227,3 @@ This will:
 git push && git push --tags
 
 ```
-
-```
-
-```
