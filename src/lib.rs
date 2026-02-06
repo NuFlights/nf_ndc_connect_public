@@ -20,7 +20,6 @@ pub struct IdpRoleData {
 pub struct IdpPermissionData {
     pub owner: String,
     pub name: String,
-    // Add other fields as needed based on your IDP's permission structure
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -29,11 +28,7 @@ pub struct IdpClaims {
     pub sub: String,
     pub exp: i64,
     pub iss: Option<String>,
-    
-    // Auth & Status
     pub is_admin: bool,
-
-    // IDP Specific
     pub roles: Option<Vec<IdpRoleData>>,
     pub groups: Option<Vec<String>>,
     pub permissions: Option<Vec<IdpPermissionData>>, 
@@ -41,7 +36,7 @@ pub struct IdpClaims {
 }
 
 // -----------------------------------------------------------------------------
-//  Output Structures for `get_org_authorisations`
+//  Output Structures
 // -----------------------------------------------------------------------------
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OrgAuthSummary {
@@ -68,7 +63,6 @@ pub struct PermissionSummary {
 //  THE AUTH HELPER (The Main Engine)
 // =============================================================================
 
-/// The central utility that holds the IDP's public key for signature verification.
 #[derive(Clone)]
 pub struct AuthHelper {
     decoding_key: DecodingKey,
@@ -76,30 +70,25 @@ pub struct AuthHelper {
 }
 
 impl AuthHelper {
-    /// Initialize with the IDP's Public Certificate (PEM format)
     pub fn new(public_key_pem: &str) -> Result<Self, String> {
         let decoding_key = DecodingKey::from_rsa_pem(public_key_pem.as_bytes())
             .map_err(|e| format!("Invalid Public Key: {}", e))?;
         
         let mut validation = Validation::new(Algorithm::RS256);
-        validation.leeway = 60; // 60 seconds of clock skew allowed
+        validation.leeway = 60;
         
         Ok(Self { decoding_key, validation })
     }
 
-    /// `is_valid (JWT)`: Parses, verifies signature, and checks expiry.
     pub fn is_valid(&self, jwt: &str) -> Result<IdpClaims, String> {
         let token_data = decode::<IdpClaims>(jwt, &self.decoding_key, &self.validation)
             .map_err(|e| format!("JWT Validation Failed: {}", e))?;
-        
         Ok(token_data.claims)
     }
 
-    /// `get_org_authorisations (JWT)`: Returns grouped lists of Orgs, Roles, and Permissions.
     pub fn get_org_authorisations(&self, jwt: &str) -> Result<Vec<OrgAuthSummary>, String> {
         let claims = self.is_valid(jwt)?;
         
-        // Map groups to Orgs. Assuming group format is "owner/org_name"
         let groups = claims.groups.unwrap_or_default();
         let all_roles = claims.roles.unwrap_or_default();
         let all_perms = claims.permissions.unwrap_or_default();
@@ -107,8 +96,6 @@ impl AuthHelper {
         let mut org_summaries = Vec::new();
 
         for (i, group) in groups.iter().enumerate() {
-            // Filter roles and perms for this specific group/org
-            // (Assuming `owner` field in roles matches the group or org ID)
             let org_roles: Vec<RoleSummary> = all_roles.iter()
                 .filter(|r| group.contains(&r.owner))
                 .map(|r| RoleSummary {
@@ -121,14 +108,14 @@ impl AuthHelper {
                 .filter(|p| group.contains(&p.owner))
                 .map(|p| PermissionSummary {
                     name: p.name.clone(),
-                    description: "Permission details".to_string(), // Placeholder
+                    description: "Permission details".to_string(),
                 })
                 .collect();
 
             org_summaries.push(OrgAuthSummary {
                 org_id: group.clone(),
                 org_name: group.split('/').last().unwrap_or(group).to_string(),
-                is_default: i == 0, // Assume first group is default
+                is_default: i == 0,
                 roles: org_roles,
                 permissions: org_perms,
             });
@@ -137,37 +124,50 @@ impl AuthHelper {
         Ok(org_summaries)
     }
 
-    /// `has_role (JWT, OrgID, Role)`: Implicitly validates JWT and checks role.
-    pub fn has_role(&self, jwt: &str, org_id: &str, role_name: &str) -> bool {
-        match self.is_valid(jwt) {
-            Ok(claims) => {
-                if let Some(roles) = claims.roles {
-                    roles.iter().any(|r| r.name == role_name && org_id.contains(&r.owner))
-                } else {
-                    false
-                }
-            },
-            Err(_) => false, // Invalid JWT means no roles
+    // --- NEW LOGIC START ---
+
+    /// Helper to resolve target Org ID based on input or claims
+    fn resolve_target_org(&self, claims: &IdpClaims, org_id: Option<&str>) -> Result<String, String> {
+        if let Some(id) = org_id {
+            return Ok(id.to_string());
+        }
+
+        let groups = claims.groups.as_deref().unwrap_or(&[]);
+        match groups.len() {
+            1 => Ok(groups[0].clone()),
+            0 => Err("No Org ID provided and no groups found in token.".to_string()),
+            n => Err(format!("Ambiguous Org context: Token contains {} groups; explicit Org ID required.", n)),
         }
     }
 
-    /// `has_permission (JWT, OrgID, Perm)`: Implicitly validates JWT and checks perm.
-    pub fn has_permission(&self, jwt: &str, org_id: &str, perm_name: &str) -> bool {
-        match self.is_valid(jwt) {
-            Ok(claims) => {
-                if let Some(perms) = claims.permissions {
-                    perms.iter().any(|p| p.name == perm_name && org_id.contains(&p.owner))
-                } else {
-                    false
-                }
-            },
-            Err(_) => false,
+    /// `has_role`: Now returns Result to handle ambiguity errors
+    pub fn has_role(&self, jwt: &str, org_id: Option<&str>, role_name: &str) -> Result<bool, String> {
+        let claims = self.is_valid(jwt)?;
+        let target_org = self.resolve_target_org(&claims, org_id)?;
+
+        if let Some(roles) = &claims.roles {
+            Ok(roles.iter().any(|r| r.name == role_name && target_org.contains(&r.owner)))
+        } else {
+            Ok(false)
         }
     }
+
+    /// `has_permission`: Now returns Result to handle ambiguity errors
+    pub fn has_permission(&self, jwt: &str, org_id: Option<&str>, perm_name: &str) -> Result<bool, String> {
+        let claims = self.is_valid(jwt)?;
+        let target_org = self.resolve_target_org(&claims, org_id)?;
+
+        if let Some(perms) = &claims.permissions {
+            Ok(perms.iter().any(|p| p.name == perm_name && target_org.contains(&p.owner)))
+        } else {
+            Ok(false)
+        }
+    }
+    // --- NEW LOGIC END ---
 }
 
 // =============================================================================
-//  PYTHON BINDINGS (#[cfg(feature = "python")])
+//  PYTHON BINDINGS
 // =============================================================================
 
 #[cfg(feature = "python")]
@@ -196,17 +196,19 @@ impl PyIdpAuthHelper {
     fn get_org_authorisations(&self, jwt: String) -> PyResult<String> {
         let auths = self.inner.get_org_authorisations(&jwt)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
-        // Return as JSON string to Python for easy dictionary conversion
         serde_json::to_string(&auths)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     }
 
-    fn has_role(&self, jwt: String, org_id: String, role_name: String) -> bool {
-        self.inner.has_role(&jwt, &org_id, &role_name)
+    // Updated to accept Optional org_id and return Result (throws exception in Python on error)
+    fn has_role(&self, jwt: String, org_id: Option<String>, role_name: String) -> PyResult<bool> {
+        self.inner.has_role(&jwt, org_id.as_deref(), &role_name)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
     }
 
-    fn has_permission(&self, jwt: String, org_id: String, perm_name: String) -> bool {
-        self.inner.has_permission(&jwt, &org_id, &perm_name)
+    fn has_permission(&self, jwt: String, org_id: Option<String>, perm_name: String) -> PyResult<bool> {
+        self.inner.has_permission(&jwt, org_id.as_deref(), &perm_name)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
     }
 }
 
@@ -218,7 +220,7 @@ fn nf_auth_helper(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 // =============================================================================
-//  WASM / NPM BINDINGS (#[cfg(feature = "wasm")])
+//  WASM / NPM BINDINGS
 // =============================================================================
 
 #[cfg(feature = "wasm")]
@@ -245,20 +247,23 @@ impl WasmIdpAuthHelper {
         self.inner.is_valid(jwt).is_ok()
     }
 
-    #[wasm_bindgen(js_name = hasRole)]
-    pub fn has_role(&self, jwt: &str, org_id: &str, role_name: &str) -> bool {
-        self.inner.has_role(jwt, org_id, role_name)
-    }
-
-    #[wasm_bindgen(js_name = hasPermission)]
-    pub fn has_permission(&self, jwt: &str, org_id: &str, perm_name: &str) -> bool {
-        self.inner.has_permission(jwt, org_id, perm_name)
-    }
-
     #[wasm_bindgen(js_name = getOrgAuthorisations)]
     pub fn get_org_authorisations(&self, jwt: &str) -> Result<JsValue, JsError> {
         let auths = self.inner.get_org_authorisations(jwt)
             .map_err(|e| JsError::new(&e))?;
         serde_wasm_bindgen::to_value(&auths).map_err(Into::into)
+    }
+
+    // Updated to accept Optional org_id (null/undefined in JS) and return Result (throws Error in JS)
+    #[wasm_bindgen(js_name = hasRole)]
+    pub fn has_role(&self, jwt: &str, org_id: Option<String>, role_name: &str) -> Result<bool, JsError> {
+        self.inner.has_role(jwt, org_id.as_deref(), role_name)
+            .map_err(|e| JsError::new(&e))
+    }
+
+    #[wasm_bindgen(js_name = hasPermission)]
+    pub fn has_permission(&self, jwt: &str, org_id: Option<String>, perm_name: &str) -> Result<bool, JsError> {
+        self.inner.has_permission(jwt, org_id.as_deref(), perm_name)
+            .map_err(|e| JsError::new(&e))
     }
 }
