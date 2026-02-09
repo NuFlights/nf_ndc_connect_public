@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // =============================================================================
-//  CASDOOR JWT STRUCTS (matched against real token payload)
+//  CASDOOR JWT STRUCTS
 // =============================================================================
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -173,6 +173,124 @@ pub struct GroupAuthSummary {
 }
 
 // =============================================================================
+//  CASDOOR USER (Context Object)
+// =============================================================================
+
+/// This struct holds the parsed state. It is returned by AuthHelper::validate.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CasdoorUser {
+    pub claims: CasdoorClaims,
+    pub summaries: Vec<GroupAuthSummary>,
+}
+
+impl CasdoorUser {
+    pub fn new(claims: CasdoorClaims) -> Self {
+        let summaries = Self::compute_summaries(&claims);
+        Self { claims, summaries }
+    }
+
+    /// Internal logic to pre-calculate the authentication summaries
+    fn compute_summaries(claims: &CasdoorClaims) -> Vec<GroupAuthSummary> {
+        let user_roles = claims.roles.as_deref().unwrap_or(&[]);
+        let user_perms = claims.permissions.as_deref().unwrap_or(&[]);
+        let direct_groups = claims.groups.as_deref().unwrap_or(&[]);
+
+        // 1. Collect all unique groups
+        let all_groups = AuthHelper::collect_all_groups(claims);
+
+        let mut summaries = Vec::new();
+
+        for group_fq in &all_groups {
+            let group_name = group_fq
+                .split_once('/')
+                .map(|(_, n)| n.to_string())
+                .unwrap_or_else(|| group_fq.clone());
+
+            let is_direct = direct_groups.contains(group_fq);
+
+            // 2. Roles scoped to this group
+            let role_names: Vec<String> = AuthHelper::roles_for_group(user_roles, group_fq)
+                .iter()
+                .map(|r| r.name.clone())
+                .collect();
+
+            // 3. Permissions scoped to this group (via role ref)
+            let perm_names: Vec<String> = user_perms
+                .iter()
+                .filter(|p| {
+                    p.is_enabled
+                        && p.roles.as_ref().is_some_and(|perm_roles| {
+                            perm_roles.iter().any(|role_ref| {
+                                AuthHelper::user_has_role_ref_for_group(
+                                    user_roles, role_ref, group_fq,
+                                )
+                            })
+                        })
+                })
+                .map(|p| p.name.clone())
+                .collect();
+
+            summaries.push(GroupAuthSummary {
+                group: group_fq.clone(),
+                group_name,
+                is_direct_member: is_direct,
+                roles: role_names,
+                permissions: perm_names,
+            });
+        }
+        summaries
+    }
+
+    /// Check if user belongs to a group (direct or via role)
+    pub fn has_group(&self, group_name: &str) -> bool {
+        let group_fq = AuthHelper::qualify_group(&self.claims, group_name);
+        self.summaries.iter().any(|s| s.group == group_fq)
+    }
+
+    /// Check if user has role. If group is None, infer default group (if only 1 exists).
+    pub fn has_role(&self, role_name: &str, group_name: Option<&str>) -> Result<bool, String> {
+        let group_fq = AuthHelper::resolve_group_from_summaries(
+            &self.summaries,
+            &self.claims.owner,
+            group_name,
+        )?;
+
+        if let Some(summary) = self.summaries.iter().find(|s| s.group == group_fq) {
+            Ok(summary.roles.contains(&role_name.to_string()))
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Check if user has permission. If group is None, infer default group (if only 1 exists).
+    pub fn has_permission(
+        &self,
+        perm_name: &str,
+        group_name: Option<&str>,
+    ) -> Result<bool, String> {
+        let group_fq = AuthHelper::resolve_group_from_summaries(
+            &self.summaries,
+            &self.claims.owner,
+            group_name,
+        )?;
+
+        if let Some(summary) = self.summaries.iter().find(|s| s.group == group_fq) {
+            Ok(summary.permissions.contains(&perm_name.to_string()))
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn is_admin(&self) -> bool {
+        self.claims.is_admin
+    }
+
+    pub fn is_global_admin(&self) -> bool {
+        self.claims.is_global_admin
+    }
+}
+
+// =============================================================================
 //  AUTH HELPER
 // =============================================================================
 
@@ -197,22 +315,23 @@ impl AuthHelper {
         })
     }
 
-    pub fn validate(&self, jwt: &str) -> Result<CasdoorClaims, String> {
-        decode::<CasdoorClaims>(jwt, &self.decoding_key, &self.validation)
+    /// Validates the JWT and returns a context object with pre-calculated summaries.
+    pub fn parse_user(&self, jwt: &str) -> Result<CasdoorUser, String> {
+        let claims = decode::<CasdoorClaims>(jwt, &self.decoding_key, &self.validation)
             .map(|td| td.claims)
-            .map_err(|e| format!("JWT Validation Failed: {}", e))
+            .map_err(|e| format!("JWT Validation Failed: {}", e))?;
+
+        Ok(CasdoorUser::new(claims))
     }
 
     pub fn is_valid(&self, jwt: &str) -> bool {
-        self.validate(jwt).is_ok()
+        self.parse_user(jwt).is_ok()
     }
 
     // =========================================================================
-    //  INTERNAL HELPERS
+    //  STATIC HELPERS
     // =========================================================================
 
-    /// Fully qualify a group name: "my_group" → "owner/my_group".
-    /// Already-qualified names ("owner/my_group") pass through unchanged.
     fn qualify_group(claims: &CasdoorClaims, group_name: &str) -> String {
         if group_name.contains('/') {
             group_name.to_string()
@@ -221,9 +340,6 @@ impl AuthHelper {
         }
     }
 
-    /// Collect all unique fully-qualified group identifiers from:
-    /// 1. Direct claims.groups
-    /// 2. role.groups on each of the user's roles
     fn collect_all_groups(claims: &CasdoorClaims) -> Vec<String> {
         let user_roles = claims.roles.as_deref().unwrap_or(&[]);
         let direct_groups = claims.groups.as_deref().unwrap_or(&[]);
@@ -248,21 +364,24 @@ impl AuthHelper {
         all
     }
 
-    /// Resolve the target group when the caller didn't specify one.
-    /// - 0 groups → error
-    /// - 1 group  → use it as default
-    /// - N groups → error (ambiguous)
-    fn resolve_group(claims: &CasdoorClaims, group_name: Option<&str>) -> Result<String, String> {
+    fn resolve_group_from_summaries(
+        summaries: &[GroupAuthSummary],
+        owner: &str,
+        group_name: Option<&str>,
+    ) -> Result<String, String> {
         if let Some(name) = group_name {
-            return Ok(Self::qualify_group(claims, name));
+            if name.contains('/') {
+                return Ok(name.to_string());
+            } else {
+                return Ok(format!("{}/{}", owner, name));
+            }
         }
 
-        let groups = Self::collect_all_groups(claims);
-        match groups.len() {
+        match summaries.len() {
             0 => Err("No group specified and user belongs to no groups.".to_string()),
-            1 => Ok(groups.into_iter().next().unwrap()),
+            1 => Ok(summaries[0].group.clone()),
             n => {
-                let names: Vec<&str> = groups.iter().map(|s| s.as_str()).collect();
+                let names: Vec<&str> = summaries.iter().map(|s| s.group.as_str()).collect();
                 Err(format!(
                     "No group specified and user belongs to {} groups: [{}]. Explicit group required.",
                     n,
@@ -272,7 +391,6 @@ impl AuthHelper {
         }
     }
 
-    /// Get roles scoped to a specific fully-qualified group.
     fn roles_for_group<'a>(roles: &'a [CasdoorRole], group_fq: &str) -> Vec<&'a CasdoorRole> {
         roles
             .iter()
@@ -285,8 +403,6 @@ impl AuthHelper {
             .collect()
     }
 
-    /// Check if a role ref ("owner/role_name") from a permission is among the
-    /// user's roles that are scoped to the target group.
     fn user_has_role_ref_for_group(
         user_roles: &[CasdoorRole],
         role_ref: &str,
@@ -305,140 +421,6 @@ impl AuthHelper {
             false
         }
     }
-
-    // =========================================================================
-    //  1. LIST GROUPS
-    // =========================================================================
-
-    pub fn list_groups(&self, jwt: &str) -> Result<Vec<GroupAuthSummary>, String> {
-        let claims = self.validate(jwt)?;
-
-        let user_roles = claims.roles.as_deref().unwrap_or(&[]);
-        let user_perms = claims.permissions.as_deref().unwrap_or(&[]);
-        let direct_groups = claims.groups.as_deref().unwrap_or(&[]);
-        let all_groups = Self::collect_all_groups(&claims);
-
-        let mut summaries = Vec::new();
-        for group_fq in &all_groups {
-            let group_name = group_fq
-                .split_once('/')
-                .map(|(_, n)| n.to_string())
-                .unwrap_or_else(|| group_fq.clone());
-
-            let is_direct = direct_groups.contains(group_fq);
-
-            let role_names: Vec<String> = Self::roles_for_group(user_roles, group_fq)
-                .iter()
-                .map(|r| r.name.clone())
-                .collect();
-
-            let perm_names: Vec<String> = user_perms
-                .iter()
-                .filter(|p| {
-                    p.is_enabled
-                        && p.roles.as_ref().is_some_and(|perm_roles| {
-                            perm_roles.iter().any(|role_ref| {
-                                Self::user_has_role_ref_for_group(user_roles, role_ref, group_fq)
-                            })
-                        })
-                })
-                .map(|p| p.name.clone())
-                .collect();
-
-            summaries.push(GroupAuthSummary {
-                group: group_fq.clone(),
-                group_name,
-                is_direct_member: is_direct,
-                roles: role_names,
-                permissions: perm_names,
-            });
-        }
-
-        Ok(summaries)
-    }
-
-    // =========================================================================
-    //  2. HAS GROUP
-    // =========================================================================
-
-    /// Check if user belongs to a group (direct or via role).
-    /// `group_name`: short ("my_group") or qualified ("owner/my_group").
-    /// Not optional here — this is the "check" method, not "act within" method.
-    pub fn has_group(&self, jwt: &str, group_name: &str) -> Result<bool, String> {
-        let claims = self.validate(jwt)?;
-        let group_fq = Self::qualify_group(&claims, group_name);
-        let all_groups = Self::collect_all_groups(&claims);
-        Ok(all_groups.iter().any(|g| g == &group_fq))
-    }
-
-    // =========================================================================
-    //  3. HAS ROLE FOR GROUP
-    // =========================================================================
-
-    /// Check if user has `role_name` scoped to a group.
-    /// If `group_name` is None:
-    ///   - 1 group  → uses it as default
-    ///   - 0 or >1  → returns error
-    pub fn has_role_for_group(
-        &self,
-        jwt: &str,
-        role_name: &str,
-        group_name: Option<&str>,
-    ) -> Result<bool, String> {
-        let claims = self.validate(jwt)?;
-        let group_fq = Self::resolve_group(&claims, group_name)?;
-        let user_roles = claims.roles.as_deref().unwrap_or(&[]);
-
-        Ok(user_roles.iter().any(|r| {
-            r.name == role_name
-                && r.is_enabled
-                && r.groups
-                    .as_ref()
-                    .is_some_and(|gs| gs.iter().any(|g| g == &group_fq))
-        }))
-    }
-
-    // =========================================================================
-    //  4. HAS PERMISSION FOR GROUP
-    // =========================================================================
-
-    /// Check if user has `perm_name` that traces to a group through the role chain.
-    /// If `group_name` is None:
-    ///   - 1 group  → uses it as default
-    ///   - 0 or >1  → returns error
-    pub fn has_permission_for_group(
-        &self,
-        jwt: &str,
-        perm_name: &str,
-        group_name: Option<&str>,
-    ) -> Result<bool, String> {
-        let claims = self.validate(jwt)?;
-        let group_fq = Self::resolve_group(&claims, group_name)?;
-        let user_roles = claims.roles.as_deref().unwrap_or(&[]);
-        let user_perms = claims.permissions.as_deref().unwrap_or(&[]);
-
-        Ok(user_perms.iter().any(|p| {
-            p.name == perm_name
-                && p.is_enabled
-                && p.roles.as_ref().is_some_and(|perm_roles| {
-                    perm_roles.iter().any(|role_ref| {
-                        Self::user_has_role_ref_for_group(user_roles, role_ref, &group_fq)
-                    })
-                })
-        }))
-    }
-
-    // =========================================================================
-    //  ADMIN CHECKS
-    // =========================================================================
-
-    pub fn is_admin(&self, jwt: &str) -> Result<bool, String> {
-        Ok(self.validate(jwt)?.is_admin)
-    }
-
-    pub fn is_global_admin(&self, jwt: &str) -> Result<bool, String> {
-        Ok(self.validate(jwt)?.is_global_admin)
-    }
 }
 
 // =============================================================================
@@ -447,6 +429,56 @@ impl AuthHelper {
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+#[pyclass(name = "CasdoorUser")]
+pub struct PyCasdoorUser {
+    inner: CasdoorUser,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl PyCasdoorUser {
+    /// Returns the full list of group summaries as JSON
+    fn get_auth_summary(&self) -> PyResult<String> {
+        serde_json::to_string(&self.inner.summaries)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    /// Returns the raw JWT claims as JSON
+    fn get_claims(&self) -> PyResult<String> {
+        serde_json::to_string(&self.inner.claims)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    fn has_group(&self, group_name: String) -> bool {
+        self.inner.has_group(&group_name)
+    }
+
+    #[pyo3(signature = (role_name, group_name=None))]
+    fn has_role(&self, role_name: String, group_name: Option<String>) -> PyResult<bool> {
+        self.inner
+            .has_role(&role_name, group_name.as_deref())
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+    }
+
+    #[pyo3(signature = (perm_name, group_name=None))]
+    fn has_permission(&self, perm_name: String, group_name: Option<String>) -> PyResult<bool> {
+        self.inner
+            .has_permission(&perm_name, group_name.as_deref())
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+    }
+
+    #[getter]
+    fn is_admin(&self) -> bool {
+        self.inner.is_admin()
+    }
+
+    #[getter]
+    fn is_global_admin(&self) -> bool {
+        self.inner.is_global_admin()
+    }
+}
 
 #[cfg(feature = "python")]
 #[pyclass(name = "IdpAuthHelper")]
@@ -468,68 +500,14 @@ impl PyIdpAuthHelper {
         self.inner.is_valid(&jwt)
     }
 
-    fn validate(&self, jwt: String) -> PyResult<String> {
-        let claims = self
+    /// Validates JWT and returns a CasdoorUser context object.
+    /// This is the primary entry point.
+    fn validate(&self, jwt: String) -> PyResult<PyCasdoorUser> {
+        let user = self
             .inner
-            .validate(&jwt)
+            .parse_user(&jwt)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
-        serde_json::to_string(&claims)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-    }
-
-    fn list_groups(&self, jwt: String) -> PyResult<String> {
-        let groups = self
-            .inner
-            .list_groups(&jwt)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
-        serde_json::to_string(&groups)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-    }
-
-    fn has_group(&self, jwt: String, group_name: String) -> PyResult<bool> {
-        self.inner
-            .has_group(&jwt, &group_name)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
-    }
-
-    /// group_name: Optional[str] = None
-    /// Raises ValueError if group_name is None and user has 0 or >1 groups.
-    #[pyo3(signature = (jwt, role_name, group_name=None))]
-    fn has_role_for_group(
-        &self,
-        jwt: String,
-        role_name: String,
-        group_name: Option<String>,
-    ) -> PyResult<bool> {
-        self.inner
-            .has_role_for_group(&jwt, &role_name, group_name.as_deref())
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
-    }
-
-    /// group_name: Optional[str] = None
-    /// Raises ValueError if group_name is None and user has 0 or >1 groups.
-    #[pyo3(signature = (jwt, perm_name, group_name=None))]
-    fn has_permission_for_group(
-        &self,
-        jwt: String,
-        perm_name: String,
-        group_name: Option<String>,
-    ) -> PyResult<bool> {
-        self.inner
-            .has_permission_for_group(&jwt, &perm_name, group_name.as_deref())
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
-    }
-
-    fn is_admin(&self, jwt: String) -> PyResult<bool> {
-        self.inner
-            .is_admin(&jwt)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
-    }
-
-    fn is_global_admin(&self, jwt: String) -> PyResult<bool> {
-        self.inner
-            .is_global_admin(&jwt)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+        Ok(PyCasdoorUser { inner: user })
     }
 }
 
@@ -537,6 +515,7 @@ impl PyIdpAuthHelper {
 #[pymodule]
 fn nf_ndc_connect_public(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyIdpAuthHelper>()?;
+    m.add_class::<PyCasdoorUser>()?;
     Ok(())
 }
 
@@ -546,6 +525,59 @@ fn nf_ndc_connect_public(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen(js_name = CasdoorUser)]
+pub struct WasmCasdoorUser {
+    inner: CasdoorUser,
+}
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen(js_class = CasdoorUser)]
+impl WasmCasdoorUser {
+    #[wasm_bindgen(getter)]
+    pub fn summaries(&self) -> Result<JsValue, JsError> {
+        serde_wasm_bindgen::to_value(&self.inner.summaries).map_err(Into::into)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn claims(&self) -> Result<JsValue, JsError> {
+        serde_wasm_bindgen::to_value(&self.inner.claims).map_err(Into::into)
+    }
+
+    #[wasm_bindgen(js_name = hasGroup)]
+    pub fn has_group(&self, group_name: &str) -> bool {
+        self.inner.has_group(group_name)
+    }
+
+    #[wasm_bindgen(js_name = hasRole)]
+    pub fn has_role(&self, role_name: &str, group_name: Option<String>) -> Result<bool, JsError> {
+        self.inner
+            .has_role(role_name, group_name.as_deref())
+            .map_err(|e| JsError::new(&e))
+    }
+
+    #[wasm_bindgen(js_name = hasPermission)]
+    pub fn has_permission(
+        &self,
+        perm_name: &str,
+        group_name: Option<String>,
+    ) -> Result<bool, JsError> {
+        self.inner
+            .has_permission(perm_name, group_name.as_deref())
+            .map_err(|e| JsError::new(&e))
+    }
+
+    #[wasm_bindgen(getter = isAdmin)]
+    pub fn is_admin(&self) -> bool {
+        self.inner.is_admin()
+    }
+
+    #[wasm_bindgen(getter = isGlobalAdmin)]
+    pub fn is_global_admin(&self) -> bool {
+        self.inner.is_global_admin()
+    }
+}
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen(js_name = IdpAuthHelper)]
@@ -567,62 +599,10 @@ impl WasmIdpAuthHelper {
         self.inner.is_valid(jwt)
     }
 
+    /// Validates the JWT and returns a CasdoorUser object.
     #[wasm_bindgen(js_name = validate)]
-    pub fn validate(&self, jwt: &str) -> Result<JsValue, JsError> {
-        let claims = self.inner.validate(jwt).map_err(|e| JsError::new(&e))?;
-        serde_wasm_bindgen::to_value(&claims).map_err(Into::into)
-    }
-
-    #[wasm_bindgen(js_name = listGroups)]
-    pub fn list_groups(&self, jwt: &str) -> Result<JsValue, JsError> {
-        let groups = self.inner.list_groups(jwt).map_err(|e| JsError::new(&e))?;
-        serde_wasm_bindgen::to_value(&groups).map_err(Into::into)
-    }
-
-    #[wasm_bindgen(js_name = hasGroup)]
-    pub fn has_group(&self, jwt: &str, group_name: &str) -> Result<bool, JsError> {
-        self.inner
-            .has_group(jwt, group_name)
-            .map_err(|e| JsError::new(&e))
-    }
-
-    /// group_name is optional (pass null/undefined in JS).
-    /// Throws Error if null and user has 0 or >1 groups.
-    #[wasm_bindgen(js_name = hasRoleForGroup)]
-    pub fn has_role_for_group(
-        &self,
-        jwt: &str,
-        role_name: &str,
-        group_name: Option<String>,
-    ) -> Result<bool, JsError> {
-        self.inner
-            .has_role_for_group(jwt, role_name, group_name.as_deref())
-            .map_err(|e| JsError::new(&e))
-    }
-
-    /// group_name is optional (pass null/undefined in JS).
-    /// Throws Error if null and user has 0 or >1 groups.
-    #[wasm_bindgen(js_name = hasPermissionForGroup)]
-    pub fn has_permission_for_group(
-        &self,
-        jwt: &str,
-        perm_name: &str,
-        group_name: Option<String>,
-    ) -> Result<bool, JsError> {
-        self.inner
-            .has_permission_for_group(jwt, perm_name, group_name.as_deref())
-            .map_err(|e| JsError::new(&e))
-    }
-
-    #[wasm_bindgen(js_name = isAdmin)]
-    pub fn is_admin(&self, jwt: &str) -> Result<bool, JsError> {
-        self.inner.is_admin(jwt).map_err(|e| JsError::new(&e))
-    }
-
-    #[wasm_bindgen(js_name = isGlobalAdmin)]
-    pub fn is_global_admin(&self, jwt: &str) -> Result<bool, JsError> {
-        self.inner
-            .is_global_admin(jwt)
-            .map_err(|e| JsError::new(&e))
+    pub fn validate(&self, jwt: &str) -> Result<WasmCasdoorUser, JsError> {
+        let user = self.inner.parse_user(jwt).map_err(|e| JsError::new(&e))?;
+        Ok(WasmCasdoorUser { inner: user })
     }
 }

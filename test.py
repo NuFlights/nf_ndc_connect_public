@@ -17,15 +17,26 @@ def test_claims():
     print("✅ Auth Helper Ready")
 
     # 3. Validation Check
+    # We can check validity quickly without parsing everything...
     is_valid = helper.is_valid(raw_jwt)
     print(f"   🔹 is_valid: {is_valid}")
 
     if not is_valid:
-        print("❌ JWT is invalid (expired, forged, or malformed). Stopping tests.")
+        print("❌ JWT is invalid. Stopping tests.")
+        return
+
+    # ... But to get data, we 'validate' to get the User Context Object
+    print("🚀 Parsing User Context...")
+    try:
+        user = helper.validate(raw_jwt)
+        print("USER: ", user)
+    except ValueError as e:
+        print(f"❌ Validation failed: {e}")
         return
 
     # 4. List Groups (organizations) the user belongs to
-    groups_str = helper.list_groups(raw_jwt)
+    # Note: method called on 'user', returns JSON string
+    groups_str = user.get_auth_summary()
     groups = json.loads(groups_str)
 
     print("\n📂 User Groups:")
@@ -39,57 +50,55 @@ def test_claims():
 
     # 5. Check group membership
     test_group = "group_test_dhilipsiva1"  # Adjust to match your data
-    has_grp = helper.has_group(raw_jwt, test_group)
+
+    # Method called on 'user', no jwt arg needed
+    has_grp = user.has_group(test_group)
     print(f"\n   🔹 has_group('{test_group}'): {has_grp}")
 
-    has_grp_no = helper.has_group(raw_jwt, "nonexistent_group")
+    has_grp_no = user.has_group("nonexistent_group")
     print(f"   🔸 has_group('nonexistent_group'): {has_grp_no}")
 
     # 6. Check role for a specific group
     test_role = "role_dhilipsiva_1"  # Adjust to match your data
 
-    has_role = helper.has_role_for_group(raw_jwt, test_role, test_group)
-    print(f"\n   🔹 has_role_for_group('{test_role}', '{test_group}'): {has_role}")
+    # Renamed from has_role_for_group -> has_role
+    has_role = user.has_role(test_role, test_group)
+    print(f"\n   🔹 has_role('{test_role}', '{test_group}'): {has_role}")
 
     # Negative: role exists but on a different group
-    has_role_wrong = helper.has_role_for_group(raw_jwt, "role_dhilipsiva_2", test_group)
-    print(
-        f"   🔸 has_role_for_group('role_dhilipsiva_2', '{test_group}'): {has_role_wrong}"
-    )
+    has_role_wrong = user.has_role("role_dhilipsiva_2", test_group)
+    print(f"   🔸 has_role('role_dhilipsiva_2', '{test_group}'): {has_role_wrong}")
 
     # 7. Check permission for a specific group
     test_perm = "permission_dhilipsiva_1"  # Adjust to match your data
 
-    has_perm = helper.has_permission_for_group(raw_jwt, test_perm, test_group)
-    print(
-        f"\n   🔹 has_permission_for_group('{test_perm}', '{test_group}'): {has_perm}"
-    )
+    # Renamed from has_permission_for_group -> has_permission
+    has_perm = user.has_permission(test_perm, test_group)
+    print(f"\n   🔹 has_permission('{test_perm}', '{test_group}'): {has_perm}")
 
     # Negative: permission traces to a different group only
-    has_perm_no = helper.has_permission_for_group(
-        raw_jwt, "permission_dhilipsiva_3", test_group
-    )
+    has_perm_no = user.has_permission("permission_dhilipsiva_3", test_group)
     print(
-        f"   🔸 has_permission_for_group('permission_dhilipsiva_3', '{test_group}'): {has_perm_no}"
+        f"   🔸 has_permission('permission_dhilipsiva_3', '{test_group}'): {has_perm_no}"
     )
 
     # 8. Optional group — omit group_name (should error if user has >1 group)
     print("\n   ⚙️  Testing optional group (no group_name passed):")
     try:
-        result = helper.has_role_for_group(raw_jwt, test_role)
-        print(f"   🔹 has_role_for_group('{test_role}'): {result}")
+        result = user.has_role(test_role)
+        print(f"   🔹 has_role('{test_role}'): {result}")
     except ValueError as e:
-        print(f"   ⚠️  has_role_for_group('{test_role}'): ValueError — {e}")
+        print(f"   ⚠️  has_role('{test_role}'): ValueError — {e}")
 
     try:
-        result = helper.has_permission_for_group(raw_jwt, test_perm)
-        print(f"   🔹 has_permission_for_group('{test_perm}'): {result}")
+        result = user.has_permission(test_perm)
+        print(f"   🔹 has_permission('{test_perm}'): {result}")
     except ValueError as e:
-        print(f"   ⚠️  has_permission_for_group('{test_perm}'): ValueError — {e}")
+        print(f"   ⚠️  has_permission('{test_perm}'): ValueError — {e}")
 
-    # 9. Admin checks
-    print(f"\n   🔹 is_admin: {helper.is_admin(raw_jwt)}")
-    print(f"   🔹 is_global_admin: {helper.is_global_admin(raw_jwt)}")
+    # 9. Admin checks (Properties, not methods)
+    print(f"\n   🔹 is_admin: {user.is_admin}")
+    print(f"   🔹 is_global_admin: {user.is_global_admin}")
 
 
 if __name__ == "__main__":

@@ -65,7 +65,7 @@
                     const helper = new IdpAuthHelper(publicKey);
                     log("✅ Helper Initialized", "success");
 
-                    // 4. Validate JWT
+                    // 4. Validate JWT & Get User Context
                     const isValid = helper.isValid(rawJwt);
                     log(
                         `🔹 isValid(JWT): <b>${isValid}</b>`,
@@ -73,8 +73,15 @@
                     );
                     if (!isValid) return;
 
+                    // --- NEW: Generate Context Object ---
+                    const user = helper.validate(rawJwt);
+                    debugger;
+                    log("✅ User Context Parsed", "success");
+
                     // 5. List Groups
-                    const groups = helper.listGroups(rawJwt);
+                    // Accessed via getter property .summaries on the user object
+                    const groups = user.summaries;
+
                     log(`<br>📂 <b>User Groups:</b>`);
                     groups.forEach((g) => {
                         const tag = g.is_direct_member
@@ -94,16 +101,14 @@
                     // 6. Check group membership
                     const testGroup = "group_test_dhilipsiva1"; // Adjust to match your data
 
-                    const hasGrp = helper.hasGroup(rawJwt, testGroup);
+                    // Call on 'user', no jwt arg
+                    const hasGrp = user.hasGroup(testGroup);
                     log(
                         `<br>🔹 hasGroup('${testGroup}'): <b>${hasGrp}</b>`,
                         hasGrp ? "success" : "fail",
                     );
 
-                    const hasGrpNo = helper.hasGroup(
-                        rawJwt,
-                        "nonexistent_group",
-                    );
+                    const hasGrpNo = user.hasGroup("nonexistent_group");
                     log(
                         `🔸 hasGroup('nonexistent_group'): <b>${hasGrpNo}</b>`,
                         "fail",
@@ -112,46 +117,38 @@
                     // 7. Check role for a specific group
                     const testRole = "role_dhilipsiva_1"; // Adjust to match your data
 
-                    const hasRole = helper.hasRoleForGroup(
-                        rawJwt,
-                        testRole,
-                        testGroup,
-                    );
+                    // Renamed to hasRole, called on user
+                    const hasRole = user.hasRole(testRole, testGroup);
                     log(
-                        `<br>🔹 hasRoleForGroup('${testRole}', '${testGroup}'): <b>${hasRole}</b>`,
+                        `<br>🔹 hasRole('${testRole}', '${testGroup}'): <b>${hasRole}</b>`,
                         hasRole ? "success" : "fail",
                     );
 
-                    const hasRoleWrong = helper.hasRoleForGroup(
-                        rawJwt,
+                    const hasRoleWrong = user.hasRole(
                         "role_dhilipsiva_2",
                         testGroup,
                     );
                     log(
-                        `🔸 hasRoleForGroup('role_dhilipsiva_2', '${testGroup}'): <b>${hasRoleWrong}</b>`,
+                        `🔸 hasRole('role_dhilipsiva_2', '${testGroup}'): <b>${hasRoleWrong}</b>`,
                         "fail",
                     );
 
                     // 8. Check permission for a specific group
                     const testPerm = "permission_dhilipsiva_1"; // Adjust to match your data
 
-                    const hasPerm = helper.hasPermissionForGroup(
-                        rawJwt,
-                        testPerm,
-                        testGroup,
-                    );
+                    // Renamed to hasPermission, called on user
+                    const hasPerm = user.hasPermission(testPerm, testGroup);
                     log(
-                        `<br>🔹 hasPermissionForGroup('${testPerm}', '${testGroup}'): <b>${hasPerm}</b>`,
+                        `<br>🔹 hasPermission('${testPerm}', '${testGroup}'): <b>${hasPerm}</b>`,
                         hasPerm ? "success" : "fail",
                     );
 
-                    const hasPermNo = helper.hasPermissionForGroup(
-                        rawJwt,
+                    const hasPermNo = user.hasPermission(
                         "permission_dhilipsiva_3",
                         testGroup,
                     );
                     log(
-                        `🔸 hasPermissionForGroup('permission_dhilipsiva_3', '${testGroup}'): <b>${hasPermNo}</b>`,
+                        `🔸 hasPermission('permission_dhilipsiva_3', '${testGroup}'): <b>${hasPermNo}</b>`,
                         "fail",
                     );
 
@@ -159,44 +156,34 @@
                     log(`<br>⚙️ <b>Testing optional group (null):</b>`);
 
                     try {
-                        const result = helper.hasRoleForGroup(
-                            rawJwt,
-                            testRole,
-                            null,
-                        );
+                        const result = user.hasRole(testRole, null);
                         log(
-                            `🔹 hasRoleForGroup('${testRole}', null): <b>${result}</b>`,
+                            `🔹 hasRole('${testRole}', null): <b>${result}</b>`,
                             "success",
                         );
                     } catch (e) {
                         log(
-                            `⚠️ hasRoleForGroup('${testRole}', null): <b>${e.message}</b>`,
+                            `⚠️ hasRole('${testRole}', null): <b>${e.message}</b>`,
                             "warn",
                         );
                     }
 
                     try {
-                        const result = helper.hasPermissionForGroup(
-                            rawJwt,
-                            testPerm,
-                            null,
-                        );
+                        const result = user.hasPermission(testPerm, null);
                         log(
-                            `🔹 hasPermissionForGroup('${testPerm}', null): <b>${result}</b>`,
+                            `🔹 hasPermission('${testPerm}', null): <b>${result}</b>`,
                             "success",
                         );
                     } catch (e) {
                         log(
-                            `⚠️ hasPermissionForGroup('${testPerm}', null): <b>${e.message}</b>`,
+                            `⚠️ hasPermission('${testPerm}', null): <b>${e.message}</b>`,
                             "warn",
                         );
                     }
 
-                    // 10. Admin checks
-                    log(`<br>🔹 isAdmin: <b>${helper.isAdmin(rawJwt)}</b>`);
-                    log(
-                        `🔹 isGlobalAdmin: <b>${helper.isGlobalAdmin(rawJwt)}</b>`,
-                    );
+                    // 10. Admin checks (Getters on user object)
+                    log(`<br>🔹 isAdmin: <b>${user.isAdmin}</b>`);
+                    log(`🔹 isGlobalAdmin: <b>${user.isGlobalAdmin}</b>`);
                 } catch (e) {
                     console.error(e);
                     log(`❌ Error: ${e.message}`, "fail");
