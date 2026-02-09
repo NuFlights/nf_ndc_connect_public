@@ -28,32 +28,79 @@ jobs:
         run: cargo publish
 
   # ============================================================================
-  #  2. PYTHON (PYPI) - TRUSTED PUBLISHING
+  #  2A. PYTHON (BUILD WHEELS)
+  #  Builds binaries for Linux, macOS, and Windows
   # ============================================================================
-  publish-pypi:
-    name: Publish to PyPI
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # <--- CRITICAL: This allows GitHub to generate the OIDC token
-      contents: read
+  pypi-build-wheels:
+    name: Build Wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
-      # Step 1: Build Wheels
       - name: Build Wheels
-        uses: messense/maturin-action@v1
+        uses: PyO3/maturin-action@v1
         with:
           command: build
           args: --release --out dist --features python
-          
-      # Step 2: Publish (No Password Needed)
+          sccache: 'true'
+
+      - name: Upload Wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist
+
+  # ============================================================================
+  #  2B. PYTHON (BUILD SDIST)
+  #  Builds the Source Distribution (critical fallback for other OSes)
+  # ============================================================================
+  pypi-build-sdist:
+    name: Build Source Dist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - name: Upload Sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  # ============================================================================
+  #  2C. PYTHON (PUBLISH)
+  #  Collects all artifacts and pushes to PyPI
+  # ============================================================================
+  pypi-publish:
+    name: Publish to PyPI
+    needs: [pypi-build-wheels, pypi-build-sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for Trusted Publishing
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          # Download all artifacts matching the pattern
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          # verify-metadata: false # Uncomment if you ever have issues with metadata checks
-          # attestations: true     # Default is true, now valid since we have no password!
-                    
+          # verify-metadata: false
+          # attestations: true
+
   # ============================================================================
   #  3. WASM / NODE (NPM)
   # ============================================================================
@@ -77,8 +124,7 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      # Build specifically for Node.js usage (or 'bundler' for webpack)
-      # We add --scope to ensure it matches your npm username/org
+      # Build specifically for Node.js usage
       - name: Build Wasm Package
         run: |
           wasm-pack build \
