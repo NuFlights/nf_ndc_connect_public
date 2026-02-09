@@ -1,95 +1,209 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Wasm IDP Auth Test</title>
+        <style>
+            body {
+                font-family: monospace;
+                background: #1e1e1e;
+                color: #d4d4d4;
+                padding: 2rem;
+            }
 
-<head>
-  <meta charset="UTF-8">
-  <title>Wasm IDP Auth Test</title>
-  <style>
-    body {
-      font-family: monospace;
-      background: #1e1e1e;
-      color: #d4d4d4;
-      padding: 2rem;
-    }
+            .success {
+                color: #4caf50;
+            }
 
-    .success {
-      color: #4caf50;
-    }
+            .fail {
+                color: #f44336;
+            }
 
-    .fail {
-      color: #f44336;
-    }
+            .info {
+                color: #569cd6;
+            }
 
-    .info {
-      color: #569cd6;
-    }
-  </style>
-</head>
+            .warn {
+                color: #ce9178;
+            }
+        </style>
+    </head>
 
-<body>
-  <h1>🦀 Rust Wasm IDP Auth Helper</h1>
-  <div id="output">Loading...</div>
+    <body>
+        <h1>🦀 Rust Wasm IDP Auth Helper</h1>
+        <div id="output">Loading...</div>
 
-  <script type="module">
-    import init, {IdpAuthHelper} from './pkg/nf_auth_helper.js';
+        <script type="module">
+            import init, {
+                IdpAuthHelper,
+            } from "./pkg/nf_ndc_connect_public.js";
 
-    async function run() {
-      const out = document.getElementById("output");
-      const log = (msg, cls = "info") => {
-        const div = document.createElement("div");
-        div.innerHTML = msg;
-        div.className = cls;
-        out.appendChild(div);
-      };
+            async function run() {
+                const out = document.getElementById("output");
+                const log = (msg, cls = "info") => {
+                    const div = document.createElement("div");
+                    div.innerHTML = msg;
+                    div.className = cls;
+                    out.appendChild(div);
+                };
 
-      try {
-        // 1. Initialize Wasm
-        await init();
-        out.innerHTML = "";
+                try {
+                    // 1. Initialize Wasm
+                    await init();
+                    out.innerHTML = "";
 
-        // 2. Load Public Key and JWT
-        // NOTE: Ensure cert.pem and jwt.txt are in your root folder
-        const [certRes, jwtRes] = await Promise.all([
-          fetch("./cert.pem"),
-          fetch("./jwt.txt")
-        ]);
-        const publicKey = await certRes.text();
-        const rawJwt = (await jwtRes.text()).trim();
+                    // 2. Load Public Key and JWT
+                    const [certRes, jwtRes] = await Promise.all([
+                        fetch("./cert.pem"),
+                        fetch("./sample-jwt.txt"),
+                    ]);
+                    const publicKey = await certRes.text();
+                    const rawJwt = (await jwtRes.text()).trim();
 
-        // 3. Initialize Helper
-        log("🔐 Initializing Helper with Public Key...");
-        const helper = new IdpAuthHelper(publicKey);
-        log("✅ Helper Initialized", "success");
+                    // 3. Initialize Helper
+                    log("🔐 Initializing Helper with Public Key...");
+                    const helper = new IdpAuthHelper(publicKey);
+                    log("✅ Helper Initialized", "success");
 
-        // 4. Validate JWT
-        const isValid = helper.isValid(rawJwt);
-        log(`🔹 isValid(JWT): <b>${isValid}</b>`, isValid ? "success" : "fail");
+                    // 4. Validate JWT
+                    const isValid = helper.isValid(rawJwt);
+                    log(
+                        `🔹 isValid(JWT): <b>${isValid}</b>`,
+                        isValid ? "success" : "fail",
+                    );
+                    if (!isValid) return;
 
-        if (!isValid) return;
+                    // 5. List Groups
+                    const groups = helper.listGroups(rawJwt);
+                    log(`<br>📂 <b>User Groups:</b>`);
+                    groups.forEach((g) => {
+                        const tag = g.is_direct_member
+                            ? "(direct)"
+                            : "(via role)";
+                        log(
+                            `&nbsp;&nbsp;🏢 <b>${g.group_name}</b> [${g.group}] ${tag}`,
+                        );
+                        g.roles.forEach((r) =>
+                            log(`&nbsp;&nbsp;&nbsp;&nbsp;🎭 Role: ${r}`),
+                        );
+                        g.permissions.forEach((p) =>
+                            log(`&nbsp;&nbsp;&nbsp;&nbsp;🔑 Permission: ${p}`),
+                        );
+                    });
 
-        // 5. Fetch Auth Tree
-        const authTree = helper.getOrgAuthorisations(rawJwt);
-        log(`\n📂 <b>Auth Tree Fetched:</b>`);
-        authTree.forEach(org => {
-          log(`&nbsp;&nbsp;🏢 <b>Org:</b> ${org.org_name} [${org.org_id}]`);
-          org.roles.forEach(r => log(`&nbsp;&nbsp;&nbsp;&nbsp;🎭 <b>Role:</b> ${r.name}`));
-        });
+                    // 6. Check group membership
+                    const testGroup = "group_test_dhilipsiva1"; // Adjust to match your data
 
-        // 6. Direct Capability Checks
-        const orgId = "dhilipsiva_dev/nf-apex";
-        const roleName = "nf-apex-adm";
+                    const hasGrp = helper.hasGroup(rawJwt, testGroup);
+                    log(
+                        `<br>🔹 hasGroup('${testGroup}'): <b>${hasGrp}</b>`,
+                        hasGrp ? "success" : "fail",
+                    );
 
-        const hasRole = helper.hasRole(rawJwt, orgId, roleName);
-        log(`\n🔹 hasRole('${orgId}', '${roleName}'): <b>${hasRole}</b>`, hasRole ? "success" : "fail");
+                    const hasGrpNo = helper.hasGroup(
+                        rawJwt,
+                        "nonexistent_group",
+                    );
+                    log(
+                        `🔸 hasGroup('nonexistent_group'): <b>${hasGrpNo}</b>`,
+                        "fail",
+                    );
 
-      } catch (e) {
-        console.error(e);
-        log(`❌ Error: ${e.message}`, "fail");
-      }
-    }
+                    // 7. Check role for a specific group
+                    const testRole = "role_dhilipsiva_1"; // Adjust to match your data
 
-    run();
-  </script>
-</body>
+                    const hasRole = helper.hasRoleForGroup(
+                        rawJwt,
+                        testRole,
+                        testGroup,
+                    );
+                    log(
+                        `<br>🔹 hasRoleForGroup('${testRole}', '${testGroup}'): <b>${hasRole}</b>`,
+                        hasRole ? "success" : "fail",
+                    );
 
+                    const hasRoleWrong = helper.hasRoleForGroup(
+                        rawJwt,
+                        "role_dhilipsiva_2",
+                        testGroup,
+                    );
+                    log(
+                        `🔸 hasRoleForGroup('role_dhilipsiva_2', '${testGroup}'): <b>${hasRoleWrong}</b>`,
+                        "fail",
+                    );
+
+                    // 8. Check permission for a specific group
+                    const testPerm = "permission_dhilipsiva_1"; // Adjust to match your data
+
+                    const hasPerm = helper.hasPermissionForGroup(
+                        rawJwt,
+                        testPerm,
+                        testGroup,
+                    );
+                    log(
+                        `<br>🔹 hasPermissionForGroup('${testPerm}', '${testGroup}'): <b>${hasPerm}</b>`,
+                        hasPerm ? "success" : "fail",
+                    );
+
+                    const hasPermNo = helper.hasPermissionForGroup(
+                        rawJwt,
+                        "permission_dhilipsiva_3",
+                        testGroup,
+                    );
+                    log(
+                        `🔸 hasPermissionForGroup('permission_dhilipsiva_3', '${testGroup}'): <b>${hasPermNo}</b>`,
+                        "fail",
+                    );
+
+                    // 9. Optional group — omit group_name (should error if user has >1 group)
+                    log(`<br>⚙️ <b>Testing optional group (null):</b>`);
+
+                    try {
+                        const result = helper.hasRoleForGroup(
+                            rawJwt,
+                            testRole,
+                            null,
+                        );
+                        log(
+                            `🔹 hasRoleForGroup('${testRole}', null): <b>${result}</b>`,
+                            "success",
+                        );
+                    } catch (e) {
+                        log(
+                            `⚠️ hasRoleForGroup('${testRole}', null): <b>${e.message}</b>`,
+                            "warn",
+                        );
+                    }
+
+                    try {
+                        const result = helper.hasPermissionForGroup(
+                            rawJwt,
+                            testPerm,
+                            null,
+                        );
+                        log(
+                            `🔹 hasPermissionForGroup('${testPerm}', null): <b>${result}</b>`,
+                            "success",
+                        );
+                    } catch (e) {
+                        log(
+                            `⚠️ hasPermissionForGroup('${testPerm}', null): <b>${e.message}</b>`,
+                            "warn",
+                        );
+                    }
+
+                    // 10. Admin checks
+                    log(`<br>🔹 isAdmin: <b>${helper.isAdmin(rawJwt)}</b>`);
+                    log(
+                        `🔹 isGlobalAdmin: <b>${helper.isGlobalAdmin(rawJwt)}</b>`,
+                    );
+                } catch (e) {
+                    console.error(e);
+                    log(`❌ Error: ${e.message}`, "fail");
+                }
+            }
+
+            run();
+        </script>
+    </body>
 </html>

@@ -1,6 +1,6 @@
 [package]
 name = "nf_ndc_connect_public"
-version = "0.4.1" 
+version = "0.4.1"
 edition = "2024"
 description = "Shared IDP Claims & Auth Logic for Rust, Python (Maturin), and Wasm (Wasm-Pack)"
 license = "MIT"
@@ -21,7 +21,7 @@ serde_json = "1.0"
 pyo3 = { version = "0.27.2", features = ["extension-module"], optional = true }
 wasm-bindgen = { version = "0.2.108", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
-jsonwebtoken = "10.2.0"
+jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 chrono = "0.4.43"
 getrandom = { version = "0.2", features = ["js"] }
 # ----------------------------------------------------
