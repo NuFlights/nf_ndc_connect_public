@@ -296,6 +296,18 @@ impl CasdoorUser {
     pub fn get_first_org_short_code(&self) -> Option<String> {
         self.summaries.first().map(|s| s.org_short_code.clone())
     }
+
+    pub fn username(&self) -> String {
+        self.claims.name.clone()
+    }
+
+    pub fn email(&self) -> Option<String> {
+        self.claims.email.clone()
+    }
+
+    pub fn id(&self) -> Option<String> {
+        self.claims.id.clone()
+    }
 }
 
 // =============================================================================
@@ -494,6 +506,21 @@ impl PyCasdoorUser {
     pub fn get_first_org_short_code(&self) -> Option<String> {
         self.inner.get_first_org_short_code()
     }
+
+    #[getter]
+    pub fn username(&self) -> String {
+        self.inner.username()
+    }
+
+    #[getter]
+    pub fn email(&self) -> Option<String> {
+        self.inner.email()
+    }
+
+    #[getter]
+    pub fn id(&self) -> Option<String> {
+        self.inner.id()
+    }
 }
 
 #[cfg(feature = "python")]
@@ -602,6 +629,21 @@ impl WasmCasdoorUser {
     #[wasm_bindgen(js_name = getFirstOrgShortCode)]
     pub fn get_first_org_short_code(&self) -> Option<String> {
         self.inner.get_first_org_short_code()
+    }
+
+    #[wasm_bindgen(getter = username)]
+    pub fn username(&self) -> String {
+        self.inner.username()
+    }
+
+    #[wasm_bindgen(getter = email)]
+    pub fn email(&self) -> Option<String> {
+        self.inner.email()
+    }
+
+    #[wasm_bindgen(getter = id)]
+    pub fn id(&self) -> Option<String> {
+        self.inner.id()
     }
 }
 
