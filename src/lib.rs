@@ -165,8 +165,8 @@ pub struct CasdoorClaims {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GroupAuthSummary {
-    pub group: String,
-    pub group_name: String,
+    pub org_name: String,
+    pub org_short_code: String,
     pub is_direct_member: bool,
     pub roles: Vec<String>,
     pub permissions: Vec<String>,
@@ -231,8 +231,8 @@ impl CasdoorUser {
                 .collect();
 
             summaries.push(GroupAuthSummary {
-                group: group_fq.clone(),
-                group_name,
+                org_name: group_fq.clone(),
+                org_short_code: group_name,
                 is_direct_member: is_direct,
                 roles: role_names,
                 permissions: perm_names,
@@ -244,7 +244,7 @@ impl CasdoorUser {
     /// Check if user belongs to a group (direct or via role)
     pub fn has_group(&self, group_name: &str) -> bool {
         let group_fq = AuthHelper::qualify_group(&self.claims, group_name);
-        self.summaries.iter().any(|s| s.group == group_fq)
+        self.summaries.iter().any(|s| s.org_name == group_fq)
     }
 
     /// Check if user has role. If group is None, infer default group (if only 1 exists).
@@ -255,7 +255,7 @@ impl CasdoorUser {
             group_name,
         )?;
 
-        if let Some(summary) = self.summaries.iter().find(|s| s.group == group_fq) {
+        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
             Ok(summary.roles.contains(&role_name.to_string()))
         } else {
             Ok(false)
@@ -274,7 +274,7 @@ impl CasdoorUser {
             group_name,
         )?;
 
-        if let Some(summary) = self.summaries.iter().find(|s| s.group == group_fq) {
+        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
             Ok(summary.permissions.contains(&perm_name.to_string()))
         } else {
             Ok(false)
@@ -287,6 +287,14 @@ impl CasdoorUser {
 
     pub fn is_global_admin(&self) -> bool {
         self.claims.is_global_admin
+    }
+
+    pub fn get_org_count(&self) -> usize {
+        self.summaries.len()
+    }
+
+    pub fn get_first_org_short_code(&self) -> Option<String> {
+        self.summaries.first().map(|s| s.org_short_code.clone())
     }
 }
 
@@ -379,9 +387,9 @@ impl AuthHelper {
 
         match summaries.len() {
             0 => Err("No group specified and user belongs to no groups.".to_string()),
-            1 => Ok(summaries[0].group.clone()),
+            1 => Ok(summaries[0].org_name.clone()),
             n => {
-                let names: Vec<&str> = summaries.iter().map(|s| s.group.as_str()).collect();
+                let names: Vec<&str> = summaries.iter().map(|s| s.org_name.as_str()).collect();
                 Err(format!(
                     "No group specified and user belongs to {} groups: [{}]. Explicit group required.",
                     n,
@@ -477,6 +485,14 @@ impl PyCasdoorUser {
     #[getter]
     fn is_global_admin(&self) -> bool {
         self.inner.is_global_admin()
+    }
+
+    pub fn get_org_count(&self) -> usize {
+        self.inner.get_org_count()
+    }
+
+    pub fn get_first_org_short_code(&self) -> Option<String> {
+        self.inner.get_first_org_short_code()
     }
 }
 
@@ -576,6 +592,16 @@ impl WasmCasdoorUser {
     #[wasm_bindgen(getter = isGlobalAdmin)]
     pub fn is_global_admin(&self) -> bool {
         self.inner.is_global_admin()
+    }
+
+    #[wasm_bindgen(js_name = getOrgCount)]
+    pub fn get_org_count(&self) -> usize {
+        self.inner.get_org_count()
+    }
+
+    #[wasm_bindgen(js_name = getFirstOrgShortCode)]
+    pub fn get_first_org_short_code(&self) -> Option<String> {
+        self.inner.get_first_org_short_code()
     }
 }
 

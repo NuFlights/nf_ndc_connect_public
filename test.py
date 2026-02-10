@@ -36,6 +36,8 @@ def test_claims():
 
     # 4. List Groups (organizations) the user belongs to
     # Note: method called on 'user', returns JSON string
+    print(user)
+    breakpoint()
     groups_str = user.get_auth_summary()
     groups = json.loads(groups_str)
 

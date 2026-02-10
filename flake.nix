@@ -17,7 +17,10 @@
 
         # Define Rust Toolchain with WASM target support
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [ "rust-src" ];
+          extensions = [ 
+            "rust-src" 
+            "rust-analyzer" 
+          ];
           targets = [ "wasm32-unknown-unknown" ];
         };
       in
