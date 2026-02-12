@@ -281,6 +281,48 @@ impl CasdoorUser {
         }
     }
 
+    /// Check if user has ALL provided permissions (Exhaustive check).
+    pub fn has_permissions(
+        &self,
+        perm_names: &[String],
+        group_name: Option<&str>,
+    ) -> Result<bool, String> {
+        let group_fq = AuthHelper::resolve_group_from_summaries(
+            &self.summaries,
+            &self.claims.owner,
+            group_name,
+        )?;
+
+        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
+            // Check if all requested permissions exist in the summary
+            let all_exist = perm_names.iter().all(|p| summary.permissions.contains(p));
+            Ok(all_exist)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Check if user has ANY of the provided permissions (Iterative check).
+    pub fn has_permissions_any(
+        &self,
+        perm_names: &[String],
+        group_name: Option<&str>,
+    ) -> Result<bool, String> {
+        let group_fq = AuthHelper::resolve_group_from_summaries(
+            &self.summaries,
+            &self.claims.owner,
+            group_name,
+        )?;
+
+        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
+            // Check if any requested permission exists in the summary
+            let any_exist = perm_names.iter().any(|p| summary.permissions.contains(p));
+            Ok(any_exist)
+        } else {
+            Ok(false)
+        }
+    }
+
     pub fn is_admin(&self) -> bool {
         self.claims.is_admin
     }
@@ -489,6 +531,32 @@ impl PyCasdoorUser {
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
     }
 
+    /// Check if the user has ALL provided permissions (Exhaustive)
+    /// accepts a list of strings from Python
+    #[pyo3(signature = (perm_names, group_name=None))]
+    fn has_permissions(
+        &self,
+        perm_names: Vec<String>,
+        group_name: Option<String>,
+    ) -> PyResult<bool> {
+        self.inner
+            .has_permissions(&perm_names, group_name.as_deref())
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+    }
+
+    /// Check if the user has ANY of the provided permissions (Iterative)
+    /// accepts a list of strings from Python
+    #[pyo3(signature = (perm_names, group_name=None))]
+    fn has_permissions_any(
+        &self,
+        perm_names: Vec<String>,
+        group_name: Option<String>,
+    ) -> PyResult<bool> {
+        self.inner
+            .has_permissions_any(&perm_names, group_name.as_deref())
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+    }
+
     #[getter]
     fn is_admin(&self) -> bool {
         self.inner.is_admin()
@@ -608,6 +676,32 @@ impl WasmCasdoorUser {
     ) -> Result<bool, JsError> {
         self.inner
             .has_permission(perm_name, group_name.as_deref())
+            .map_err(|e| JsError::new(&e))
+    }
+
+    /// Check if user has ALL provided permissions (Exhaustive).
+    /// JS should pass an array of strings: `["read", "write"]`
+    #[wasm_bindgen(js_name = hasPermissions)]
+    pub fn has_permissions(
+        &self,
+        perm_names: Vec<String>,
+        group_name: Option<String>,
+    ) -> Result<bool, JsError> {
+        self.inner
+            .has_permissions(&perm_names, group_name.as_deref())
+            .map_err(|e| JsError::new(&e))
+    }
+
+    /// Check if user has ANY provided permissions (Iterative).
+    /// JS should pass an array of strings: `["read", "write"]`
+    #[wasm_bindgen(js_name = hasPermissionsAny)]
+    pub fn has_permissions_any(
+        &self,
+        perm_names: Vec<String>,
+        group_name: Option<String>,
+    ) -> Result<bool, JsError> {
+        self.inner
+            .has_permissions_any(&perm_names, group_name.as_deref())
             .map_err(|e| JsError::new(&e))
     }
 

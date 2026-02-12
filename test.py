@@ -17,7 +17,6 @@ def test_claims():
     print("✅ Auth Helper Ready")
 
     # 3. Validation Check
-    # We can check validity quickly without parsing everything...
     is_valid = helper.is_valid(raw_jwt)
     print(f"   🔹 is_valid: {is_valid}")
 
@@ -29,15 +28,11 @@ def test_claims():
     print("🚀 Parsing User Context...")
     try:
         user = helper.validate(raw_jwt)
-        print("USER: ", user)
     except ValueError as e:
         print(f"❌ Validation failed: {e}")
         return
 
-    # 4. List Groups (organizations) the user belongs to
-    # Note: method called on 'user', returns JSON string
-    print(user)
-    breakpoint()
+    # 4. List Groups (organizations)
     groups_str = user.get_auth_summary()
     groups = json.loads(groups_str)
 
@@ -50,55 +45,40 @@ def test_claims():
         for p in g["permissions"]:
             print(f"      🔑 Permission: {p}")
 
-    # 5. Check group membership
     test_group = "group_test_dhilipsiva1"  # Adjust to match your data
+    test_role = "role_dhilipsiva_1"
+    test_perm = "permission_dhilipsiva_1"
 
-    # Method called on 'user', no jwt arg needed
-    has_grp = user.has_group(test_group)
-    print(f"\n   🔹 has_group('{test_group}'): {has_grp}")
-
-    has_grp_no = user.has_group("nonexistent_group")
-    print(f"   🔸 has_group('nonexistent_group'): {has_grp_no}")
-
-    # 6. Check role for a specific group
-    test_role = "role_dhilipsiva_1"  # Adjust to match your data
-
-    # Renamed from has_role_for_group -> has_role
+    # 5. Check role
     has_role = user.has_role(test_role, test_group)
     print(f"\n   🔹 has_role('{test_role}', '{test_group}'): {has_role}")
 
-    # Negative: role exists but on a different group
-    has_role_wrong = user.has_role("role_dhilipsiva_2", test_group)
-    print(f"   🔸 has_role('role_dhilipsiva_2', '{test_group}'): {has_role_wrong}")
-
-    # 7. Check permission for a specific group
-    test_perm = "permission_dhilipsiva_1"  # Adjust to match your data
-
-    # Renamed from has_permission_for_group -> has_permission
+    # 6. Check single permission
     has_perm = user.has_permission(test_perm, test_group)
-    print(f"\n   🔹 has_permission('{test_perm}', '{test_group}'): {has_perm}")
+    print(f"   🔹 has_permission('{test_perm}', '{test_group}'): {has_perm}")
 
-    # Negative: permission traces to a different group only
-    has_perm_no = user.has_permission("permission_dhilipsiva_3", test_group)
-    print(
-        f"   🔸 has_permission('permission_dhilipsiva_3', '{test_group}'): {has_perm_no}"
-    )
+    # 7. Check MULTIPLE permissions (Exhaustive & Iterative)
+    print("\n   🧪 Testing Multi-Permission Checks:")
 
-    # 8. Optional group — omit group_name (should error if user has >1 group)
+    # 7a. has_permissions (ALL must exist)
+    req_perms_all = [test_perm, "permission_dhilipsiva_2"] # Assuming 2 exists, otherwise false
+    has_all = user.has_permissions(req_perms_all, test_group)
+    print(f"   🔹 has_permissions({req_perms_all}, '{test_group}'): {has_all}")
+
+    # 7b. has_permissions_any (AT LEAST ONE must exist)
+    req_perms_any = [test_perm, "non_existent_perm_99"] 
+    has_any = user.has_permissions_any(req_perms_any, test_group)
+    print(f"   🔹 has_permissions_any({req_perms_any}, '{test_group}'): {has_any}")
+
+    # 8. Optional group — omit group_name
     print("\n   ⚙️  Testing optional group (no group_name passed):")
     try:
-        result = user.has_role(test_role)
-        print(f"   🔹 has_role('{test_role}'): {result}")
+        result = user.has_permissions_any([test_perm, "other"], None)
+        print(f"   🔹 has_permissions_any([...]): {result}")
     except ValueError as e:
-        print(f"   ⚠️  has_role('{test_role}'): ValueError — {e}")
+        print(f"   ⚠️  has_permissions_any([...]): ValueError — {e}")
 
-    try:
-        result = user.has_permission(test_perm)
-        print(f"   🔹 has_permission('{test_perm}'): {result}")
-    except ValueError as e:
-        print(f"   ⚠️  has_permission('{test_perm}'): ValueError — {e}")
-
-    # 9. Admin checks (Properties, not methods)
+    # 9. Admin checks
     print(f"\n   🔹 is_admin: {user.is_admin}")
     print(f"   🔹 is_global_admin: {user.is_global_admin}")
 

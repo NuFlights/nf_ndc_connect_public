@@ -61,40 +61,35 @@ In Python, `helper.validate(jwt)` returns a `CasdoorUser` object. All checks are
 from nf_ndc_connect_public import IdpAuthHelper
 import json
 
-# 1. Initialize with your Public Key (PEM format)
+# 1. Initialize
 with open("cert.pem", "r") as f:
     public_key = f.read()
 
 helper = IdpAuthHelper(public_key)
 raw_jwt = "eyJhbGciOiJ..."
 
-# 2. Check Validity (Fast check, no parsing)
-if not helper.is_valid(raw_jwt):
-    print("❌ Invalid Token")
-    exit(1)
-
-# 3. Parse User Context (Validates & Parses once)
+# 2. Parse User Context
 try:
     user = helper.validate(raw_jwt)
-    print(f"✅ User parsed: {user.is_admin}")
 except ValueError as e:
     print(f"❌ Validation failed: {e}")
     exit(1)
 
-# 4. Check Roles (Auto-Resolution)
-# If user is in exactly 1 Org, this works. If multiple, raises ValueError.
-try:
-    if user.has_role("nf-apex-adm"):
-        print("User is an Admin (Default Org)!")
-except ValueError as e:
-    print(f"⚠️ Ambiguous Context: {e}")
-
-# 5. Check Roles (Explicit Context)
+# 3. Check Single Role/Permission (Explicit Context)
 group_id = "dhilipsiva_dev/nf-apex"
 if user.has_role("nf-apex-adm", group_id):
-    print(f"User is an Admin in {group_id}!")
+    print("User is Admin!")
 
-# 6. Get full authorization tree (returns JSON string)
+# 4. Check Multiple Permissions
+# has_permissions = ALL must match (AND)
+if user.has_permissions(["read", "write"], group_id):
+    print("User has full R/W access")
+
+# has_permissions_any = AT LEAST ONE must match (OR)
+if user.has_permissions_any(["edit", "admin"], group_id):
+    print("User has elevated privileges")
+
+# 5. Get full authorization tree
 print(json.loads(user.get_auth_summary()))
 
 ```
@@ -106,40 +101,34 @@ In JavaScript/TypeScript, `helper.validate(jwt)` returns a `CasdoorUser` object.
 ```javascript
 import { IdpAuthHelper } from "@dhilipsiva/nf_ndc_connect_public";
 
-// 1. Initialize
-const publicKey = "..."; // Load your PEM
 const helper = new IdpAuthHelper(publicKey);
-const rawJwt = "eyJhbGciOiJ...";
-
-// 2. Validate & Get Context
-if (!helper.isValid(rawJwt)) {
-    console.error("❌ Invalid Token");
-    return;
-}
-
 const user = helper.validate(rawJwt);
-console.log("✅ User Context Parsed");
 
-try {
-    // 3. Check Role (Auto-Resolution)
-    // Pass only the role name to attempt automatic org detection
-    const hasRoleDefault = user.hasRole("nf-apex-adm");
-    console.log(`Has Admin Role (Default Org)? ${hasRoleDefault}`);
-    
-} catch (e) {
-    console.error("⚠️ Ambiguous Context:", e.message);
+const groupId = "dhilipsiva_dev/nf-apex";
+
+// 1. Single Check
+if (user.hasPermission("write", groupId)) {
+    console.log("Can write!");
 }
 
-// 4. Check Role (Explicit Context)
-// Pass role name AND group ID
-const hasRoleExplicit = user.hasRole("nf-apex-adm", "dhilipsiva_dev/nf-apex");
-console.log(`Has Admin Role (Explicit)? ${hasRoleExplicit}`);
+// 2. Multiple Permissions (Exhaustive - AND)
+// Returns true only if user has BOTH "read" AND "write"
+if (user.hasPermissions(["read", "write"], groupId)) {
+    console.log("Full Access");
+}
 
-// 5. Admin Flags
-console.log(`Is Global Admin? ${user.isGlobalAdmin}`);
+// 3. Multiple Permissions (Iterative - OR)
+// Returns true if user has EITHER "edit" OR "delete"
+if (user.hasPermissionsAny(["edit", "delete"], groupId)) {
+    console.log("Can modify content");
+}
 
-// 6. Get Auth Tree (Property)
-console.log(user.summaries);
+// 4. Auto-Resolution (Pass null for group)
+try {
+    user.hasPermissionsAny(["read"], null);
+} catch (e) {
+    console.error("Ambiguous Context:", e.message);
+}
 
 ```
 
@@ -151,30 +140,27 @@ In Rust, `helper.parse_user(jwt)` returns a `CasdoorUser` struct.
 use nf_ndc_connect_public::AuthHelper;
 
 fn main() {
-    let public_key = include_str!("../cert.pem");
-    let helper = AuthHelper::new(public_key).expect("Invalid Key");
-    let jwt = "eyJhbGciOiJ...";
+    let helper = AuthHelper::new(public_key).unwrap();
+    let user = helper.parse_user(jwt).unwrap();
+    
+    let group = Some("dhilipsiva_dev/nf-apex");
 
-    // 1. Parse User
-    match helper.parse_user(jwt) {
-        Ok(user) => {
-            println!("✅ Valid Token for subject: {}", user.claims.sub);
-            
-            // 2. Check Role (Explicit Context)
-            match user.has_role("nf-apex-adm", Some("dhilipsiva_dev/nf-apex")) {
-                Ok(true) => println!("User is Admin in specific Org"),
-                _ => println!("User is NOT Admin or group not found"),
-            }
+    // 1. Single Check
+    if user.has_permission("read", group).unwrap() {
+        println!("Can read");
+    }
 
-            // 3. Check Role (Auto-Resolution)
-            // Pass None to attempt automatic org detection
-            match user.has_role("nf-apex-adm", None) {
-                Ok(true) => println!("User is Admin (Default Org)"),
-                Ok(false) => println!("User is NOT Admin"),
-                Err(e) => println!("⚠️ Ambiguous Context: {}", e),
-            }
-        },
-        Err(e) => println!("❌ Validation Error: {}", e),
+    // 2. Multiple Checks (Vec<String>)
+    let required = vec!["read".to_string(), "write".to_string()];
+    
+    // Check ALL
+    if user.has_permissions(&required, group).unwrap() {
+        println!("Has all permissions");
+    }
+
+    // Check ANY
+    if user.has_permissions_any(&required, group).unwrap() {
+        println!("Has at least one permission");
     }
 }
 
@@ -189,11 +175,9 @@ This project uses **Nix** for a reproducible environment and **Just** for comman
 ### Prerequisites
 
 1. Install [Nix](https://nixos.org/download.html).
-2. Enable flakes (standard in newer installers).
+2. Enable flakes.
 
 ### Setup
-
-Enter the development shell. This installs Rust, Python, Maturin, Node.js, and Wasm-Pack automatically.
 
 ```bash
 nix develop
@@ -208,31 +192,3 @@ nix develop
 | `just py-build` | Build Python wheel for release |
 | `just wasm` | Build the Wasm package for Node.js/Web |
 | `just test` | Run standard Cargo tests |
-| `just clean` | Remove all build artifacts |
-
-### 🚢 Release Process
-
-To publish a new version to PyPI, NPM, and Crates.io simultaneously:
-
-1. **Ensure you are in the Nix shell** (`nix develop`).
-2. **Run the release command:**
-
-```bash
-# Usage: just release <version>
-just release 0.2.3
-
-```
-
-This will:
-
-* Update `Cargo.toml` and `pyproject.toml`.
-* Run checks.
-* Commit the changes.
-* Create a git tag `v0.2.3`.
-
-3. **Push to trigger CI/CD:**
-
-```bash
-git push && git push --tags
-
-```

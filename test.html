@@ -75,7 +75,7 @@
 
                     // --- NEW: Generate Context Object ---
                     const user = helper.validate(rawJwt);
-                    debugger;
+                    // debugger;
                     log("✅ User Context Parsed", "success");
 
                     // 5. List Groups
@@ -108,12 +108,6 @@
                         hasGrp ? "success" : "fail",
                     );
 
-                    const hasGrpNo = user.hasGroup("nonexistent_group");
-                    log(
-                        `🔸 hasGroup('nonexistent_group'): <b>${hasGrpNo}</b>`,
-                        "fail",
-                    );
-
                     // 7. Check role for a specific group
                     const testRole = "role_dhilipsiva_1"; // Adjust to match your data
 
@@ -122,15 +116,6 @@
                     log(
                         `<br>🔹 hasRole('${testRole}', '${testGroup}'): <b>${hasRole}</b>`,
                         hasRole ? "success" : "fail",
-                    );
-
-                    const hasRoleWrong = user.hasRole(
-                        "role_dhilipsiva_2",
-                        testGroup,
-                    );
-                    log(
-                        `🔸 hasRole('role_dhilipsiva_2', '${testGroup}'): <b>${hasRoleWrong}</b>`,
-                        "fail",
                     );
 
                     // 8. Check permission for a specific group
@@ -143,14 +128,24 @@
                         hasPerm ? "success" : "fail",
                     );
 
-                    const hasPermNo = user.hasPermission(
-                        "permission_dhilipsiva_3",
-                        testGroup,
-                    );
+                    // --- NEW: Check Multiple Permissions ---
+                    
+                    // 8a. hasPermissions (ALL must exist)
+                    const reqPermsAll = ["permission_dhilipsiva_1", "permission_dhilipsiva_2"]; 
+                    const hasAll = user.hasPermissions(reqPermsAll, testGroup);
                     log(
-                        `🔸 hasPermission('permission_dhilipsiva_3', '${testGroup}'): <b>${hasPermNo}</b>`,
-                        "fail",
+                        `<br>🔹 hasPermissions(['${reqPermsAll.join("', '")}'], '${testGroup}'): <b>${hasAll}</b>`,
+                        hasAll ? "success" : "fail", // Update based on your actual test data expectations
                     );
+
+                    // 8b. hasPermissionsAny (AT LEAST ONE must exist)
+                    const reqPermsAny = ["permission_dhilipsiva_1", "permission_fake_99"];
+                    const hasAny = user.hasPermissionsAny(reqPermsAny, testGroup);
+                    log(
+                        `🔹 hasPermissionsAny(['${reqPermsAny.join("', '")}'], '${testGroup}'): <b>${hasAny}</b>`,
+                        hasAny ? "success" : "fail",
+                    );
+
 
                     // 9. Optional group — omit group_name (should error if user has >1 group)
                     log(`<br>⚙️ <b>Testing optional group (null):</b>`);
@@ -169,14 +164,15 @@
                     }
 
                     try {
-                        const result = user.hasPermission(testPerm, null);
+                        // Testing plural check with null group
+                        const result = user.hasPermissionsAny(["some_perm"], null);
                         log(
-                            `🔹 hasPermission('${testPerm}', null): <b>${result}</b>`,
+                            `🔹 hasPermissionsAny(['some_perm'], null): <b>${result}</b>`,
                             "success",
                         );
                     } catch (e) {
-                        log(
-                            `⚠️ hasPermission('${testPerm}', null): <b>${e.message}</b>`,
+                         log(
+                            `⚠️ hasPermissionsAny(['some_perm'], null): <b>${e.message}</b>`,
                             "warn",
                         );
                     }
