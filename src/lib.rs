@@ -108,6 +108,8 @@ pub struct CasdoorClaims {
     pub name: String,
     #[serde(default)]
     pub id: Option<String>,
+    #[serde(default)]
+    pub id_card: String,
     #[serde(default, rename = "type")]
     pub user_type: Option<String>,
     #[serde(default)]
@@ -347,8 +349,8 @@ impl CasdoorUser {
         self.claims.email.clone()
     }
 
-    pub fn id(&self) -> Option<String> {
-        self.claims.id.clone()
+    pub fn dj_id(&self) -> String {
+        self.claims.id_card.clone()
     }
 }
 
@@ -586,8 +588,8 @@ impl PyCasdoorUser {
     }
 
     #[getter]
-    pub fn id(&self) -> Option<String> {
-        self.inner.id()
+    pub fn dj_id(&self) -> String {
+        self.inner.dj_id()
     }
 }
 
@@ -735,9 +737,9 @@ impl WasmCasdoorUser {
         self.inner.email()
     }
 
-    #[wasm_bindgen(getter = id)]
-    pub fn id(&self) -> Option<String> {
-        self.inner.id()
+    #[wasm_bindgen(getter = dj_id)]
+    pub fn dj_id(&self) -> String {
+        self.inner.dj_id()
     }
 }
 
