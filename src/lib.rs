@@ -354,7 +354,10 @@ impl CasdoorUser {
     }
 
     pub fn get_org_short_codes(&self) -> Vec<String> {
-        self.claims.groups.clone().unwrap_or_default()
+        self.summaries
+            .iter()
+            .map(|s| s.org_short_code.clone())
+            .collect()
     }
 }
 
@@ -597,7 +600,7 @@ impl PyCasdoorUser {
     }
 
     #[getter]
-    pub fn get_org_short_codes(&self) -> Vec<String> {
+    pub fn org_short_codes(&self) -> Vec<String> {
         self.inner.get_org_short_codes()
     }
 }
