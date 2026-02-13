@@ -352,6 +352,10 @@ impl CasdoorUser {
     pub fn dj_id(&self) -> String {
         self.claims.id_card.clone()
     }
+
+    pub fn get_org_short_codes(&self) -> Vec<String> {
+        self.claims.groups.clone().unwrap_or_default()
+    }
 }
 
 // =============================================================================
@@ -590,6 +594,11 @@ impl PyCasdoorUser {
     #[getter]
     pub fn dj_id(&self) -> String {
         self.inner.dj_id()
+    }
+
+    #[getter]
+    pub fn get_org_short_codes(&self) -> Vec<String> {
+        self.inner.get_org_short_codes()
     }
 }
 
