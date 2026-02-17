@@ -34,18 +34,17 @@ def test_claims():
 
     # 4. List Groups (organizations)
     groups_str = user.get_auth_summary()
-    groups = json.loads(groups_str)
+    summaries = json.loads(groups_str)
 
-    print("\n📂 User Groups:")
-    for g in groups:
-        direct = " (direct)" if g["is_direct_member"] else " (via role)"
-        print(f"   🏢 {g['group_name']} [{g['group']}]{direct}")
-        for r in g["roles"]:
-            print(f"      🎭 Role: {r}")
-        for p in g["permissions"]:
+    print("\n📂 User Group Summaries:")
+    for s in summaries:
+        print(f"   🏢 org_short_code: {s['org_short_code']}")
+        print(f"      🎭 Role: {s['role']}")
+        for p in s["permissions"]:
             print(f"      🔑 Permission: {p}")
 
-    test_group = "group_test_dhilipsiva1"  # Adjust to match your data
+    # Use real values from the sample JWT
+    test_group = "T-EK"
     test_role = "role_dhilipsiva_1"
     test_perm = "permission_dhilipsiva_1"
 
@@ -61,19 +60,20 @@ def test_claims():
     print("\n   🧪 Testing Multi-Permission Checks:")
 
     # 7a. has_permissions (ALL must exist)
-    req_perms_all = [test_perm, "permission_dhilipsiva_2"] # Assuming 2 exists, otherwise false
+    # T-EK has: permission_dhilipsiva_2, permission_dhilipsiva_1
+    req_perms_all = ["permission_dhilipsiva_1", "permission_dhilipsiva_2"]
     has_all = user.has_permissions(req_perms_all, test_group)
     print(f"   🔹 has_permissions({req_perms_all}, '{test_group}'): {has_all}")
 
     # 7b. has_permissions_any (AT LEAST ONE must exist)
-    req_perms_any = [test_perm, "non_existent_perm_99"] 
+    req_perms_any = ["permission_dhilipsiva_1", "non_existent_perm_99"]
     has_any = user.has_permissions_any(req_perms_any, test_group)
     print(f"   🔹 has_permissions_any({req_perms_any}, '{test_group}'): {has_any}")
 
-    # 8. Optional group — omit group_name
+    # 8. Optional group — omit group_name (should error since user has 2 groups)
     print("\n   ⚙️  Testing optional group (no group_name passed):")
     try:
-        result = user.has_permissions_any([test_perm, "other"], None)
+        result = user.has_permissions_any(["permission_dhilipsiva_1", "other"], None)
         print(f"   🔹 has_permissions_any([...]): {result}")
     except ValueError as e:
         print(f"   ⚠️  has_permissions_any([...]): ValueError — {e}")
@@ -81,6 +81,10 @@ def test_claims():
     # 9. Admin checks
     print(f"\n   🔹 is_admin: {user.is_admin}")
     print(f"   🔹 is_global_admin: {user.is_global_admin}")
+    print(f"   🔹 username: {user.username}")
+    print(f"   🔹 email: {user.email}")
+    print(f"   🔹 dj_id: {user.dj_id}")
+    print(f"   🔹 org_short_codes: {user.org_short_codes}")
 
 
 if __name__ == "__main__":

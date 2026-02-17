@@ -1,6 +1,5 @@
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // =============================================================================
 //  CASDOOR JWT STRUCTS
@@ -14,21 +13,21 @@ pub struct CasdoorRole {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
-    pub created_time: Option<String>,
-    #[serde(default)]
-    pub display_name: Option<String>,
+    pub display_name: String,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub groups: Option<Vec<String>>,
-    #[serde(default)]
-    pub users: Option<serde_json::Value>,
-    #[serde(default)]
-    pub roles: Option<Vec<String>>,
-    #[serde(default)]
-    pub domains: Option<Vec<String>>,
+    pub groups: Vec<String>,
     #[serde(default)]
     pub is_enabled: bool,
+}
+
+impl CasdoorRole {
+    /// Returns the fully-qualified role reference: `{owner}/{name}`
+    #[inline]
+    pub fn qualified_name(&self) -> String {
+        format!("{}/{}", self.owner, self.name)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -39,68 +38,20 @@ pub struct CasdoorPermission {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
-    pub created_time: Option<String>,
-    #[serde(default)]
     pub display_name: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub users: Option<serde_json::Value>,
-    #[serde(default)]
-    pub groups: Option<Vec<String>>,
-    #[serde(default)]
     pub roles: Option<Vec<String>>,
-    #[serde(default)]
-    pub domains: Option<Vec<String>>,
-    #[serde(default)]
-    pub model: Option<String>,
-    #[serde(default)]
-    pub adapter: Option<String>,
-    #[serde(default)]
-    pub resource_type: Option<String>,
-    #[serde(default)]
-    pub resources: Option<Vec<String>>,
     #[serde(default)]
     pub actions: Option<Vec<String>>,
     #[serde(default)]
-    pub effect: Option<String>,
-    #[serde(default)]
     pub is_enabled: bool,
-    #[serde(default)]
-    pub submitter: Option<String>,
-    #[serde(default)]
-    pub approver: Option<String>,
-    #[serde(default)]
-    pub approve_time: Option<String>,
-    #[serde(default)]
-    pub state: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CasdoorClaims {
-    // --- JWT Standard Claims ---
-    #[serde(default)]
-    pub iss: Option<String>,
-    #[serde(default)]
-    pub sub: String,
-    #[serde(default)]
-    pub aud: Option<serde_json::Value>,
-    #[serde(default)]
-    pub exp: i64,
-    #[serde(default)]
-    pub nbf: Option<i64>,
-    #[serde(default)]
-    pub iat: Option<i64>,
-    #[serde(default)]
-    pub jti: Option<String>,
-
-    // --- Casdoor Token metadata ---
-    #[serde(default)]
-    pub token_type: Option<String>,
-    #[serde(default)]
-    pub azp: Option<String>,
-
     // --- User identity ---
     #[serde(default)]
     pub owner: String,
@@ -130,14 +81,6 @@ pub struct CasdoorClaims {
     pub country_code: Option<String>,
     #[serde(default)]
     pub tag: Option<String>,
-    #[serde(default)]
-    pub affiliation: Option<String>,
-    #[serde(default)]
-    pub signup_application: Option<String>,
-    #[serde(default)]
-    pub score: Option<i32>,
-    #[serde(default)]
-    pub ranking: Option<i32>,
 
     // --- Admin flags ---
     #[serde(default)]
@@ -151,14 +94,9 @@ pub struct CasdoorClaims {
 
     // --- RBAC ---
     #[serde(default)]
-    pub roles: Option<Vec<CasdoorRole>>,
+    pub roles: Vec<CasdoorRole>,
     #[serde(default)]
-    pub permissions: Option<Vec<CasdoorPermission>>,
-    #[serde(default)]
-    pub groups: Option<Vec<String>>,
-
-    #[serde(default)]
-    pub properties: Option<HashMap<String, String>>,
+    pub permissions: Vec<CasdoorPermission>,
 }
 
 // =============================================================================
@@ -167,10 +105,8 @@ pub struct CasdoorClaims {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GroupAuthSummary {
-    pub org_name: String,
     pub org_short_code: String,
-    pub is_direct_member: bool,
-    pub roles: Vec<String>,
+    pub role: String,
     pub permissions: Vec<String>,
 }
 
@@ -186,143 +122,134 @@ pub struct CasdoorUser {
 }
 
 impl CasdoorUser {
-    pub fn new(claims: CasdoorClaims) -> Self {
-        let summaries = Self::compute_summaries(&claims);
-        Self { claims, summaries }
+    pub fn new(claims: CasdoorClaims) -> Result<Self, String> {
+        let summaries = Self::compute_summaries(&claims)?;
+        Ok(Self { claims, summaries })
     }
 
-    /// Internal logic to pre-calculate the authentication summaries
-    fn compute_summaries(claims: &CasdoorClaims) -> Vec<GroupAuthSummary> {
-        let user_roles = claims.roles.as_deref().unwrap_or(&[]);
-        let user_perms = claims.permissions.as_deref().unwrap_or(&[]);
-        let direct_groups = claims.groups.as_deref().unwrap_or(&[]);
+    /// Internal logic to pre-calculate the authentication summaries.
+    fn compute_summaries(claims: &CasdoorClaims) -> Result<Vec<GroupAuthSummary>, String> {
+        let mut summaries = Vec::with_capacity(claims.roles.len());
 
-        // 1. Collect all unique groups
-        let all_groups = AuthHelper::collect_all_groups(claims);
+        for role in &claims.roles {
+            let group = role.groups.first().ok_or_else(|| {
+                format!(
+                    "Role '{}' has no group association; exactly 1 is required",
+                    role.name
+                )
+            })?;
 
-        let mut summaries = Vec::new();
-
-        for group_fq in &all_groups {
-            let group_name = group_fq
+            let org_short_code = group
                 .split_once('/')
-                .map(|(_, n)| n.to_string())
-                .unwrap_or_else(|| group_fq.clone());
+                .map(|(_, name)| name.to_string())
+                .ok_or_else(|| {
+                    format!(
+                        "Group '{}' is not fully qualified (expected '{{owner}}/{{name}}')",
+                        group
+                    )
+                })?;
 
-            let is_direct = direct_groups.contains(group_fq);
+            let qualified_role = role.qualified_name();
 
-            // 2. Roles scoped to this group
-            let role_names: Vec<String> = AuthHelper::roles_for_group(user_roles, group_fq)
-                .iter()
-                .map(|r| r.name.clone())
-                .collect();
-
-            // 3. Permissions scoped to this group (via role ref)
-            let perm_names: Vec<String> = user_perms
+            let perm_names: Vec<String> = claims
+                .permissions
                 .iter()
                 .filter(|p| {
                     p.is_enabled
                         && p.roles.as_ref().is_some_and(|perm_roles| {
-                            perm_roles.iter().any(|role_ref| {
-                                AuthHelper::user_has_role_ref_for_group(
-                                    user_roles, role_ref, group_fq,
-                                )
-                            })
+                            perm_roles
+                                .iter()
+                                .any(|role_ref| role_ref == &qualified_role)
                         })
                 })
                 .map(|p| p.name.clone())
                 .collect();
 
             summaries.push(GroupAuthSummary {
-                org_name: group_fq.clone(),
-                org_short_code: group_name,
-                is_direct_member: is_direct,
-                roles: role_names,
+                org_short_code,
+                role: role.name.clone(),
                 permissions: perm_names,
             });
         }
-        summaries
+        Ok(summaries)
     }
 
-    /// Check if user belongs to a group (direct or via role)
-    pub fn has_group(&self, group_name: &str) -> bool {
-        let group_fq = AuthHelper::qualify_group(&self.claims, group_name);
-        self.summaries.iter().any(|s| s.org_name == group_fq)
-    }
+    // -------------------------------------------------------------------------
+    //  Group resolution helper (DRY)
+    // -------------------------------------------------------------------------
 
-    /// Check if user has role. If group is None, infer default group (if only 1 exists).
-    pub fn has_role(&self, role_name: &str, group_name: Option<&str>) -> Result<bool, String> {
-        let group_fq = AuthHelper::resolve_group_from_summaries(
-            &self.summaries,
-            &self.claims.owner,
-            group_name,
-        )?;
-
-        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
-            Ok(summary.roles.contains(&role_name.to_string()))
-        } else {
-            Ok(false)
+    /// Resolves the target summary/summaries based on optional group_name.
+    /// - If `group_name` is provided, returns the matching summary (or error).
+    /// - If `None` and exactly 1 org exists, returns that summary.
+    /// - Otherwise, errors with an ambiguity message.
+    fn resolve_group(&self, group_name: Option<&str>) -> Result<&GroupAuthSummary, String> {
+        match group_name {
+            Some(g) => self
+                .summaries
+                .iter()
+                .find(|s| s.org_short_code == g)
+                .ok_or_else(|| format!("No summary found for group '{}'", g)),
+            None if self.summaries.len() == 1 => self
+                .summaries
+                .first()
+                .ok_or_else(|| "No group summaries available".into()),
+            None => Err(format!(
+                "Ambiguous: user belongs to {} groups; specify group_name explicitly",
+                self.summaries.len()
+            )),
         }
     }
 
-    /// Check if user has permission. If group is None, infer default group (if only 1 exists).
+    // -------------------------------------------------------------------------
+    //  Query methods
+    // -------------------------------------------------------------------------
+
+    /// Check if user belongs to a group.
+    pub fn has_group(&self, group_name: &str) -> bool {
+        self.summaries
+            .iter()
+            .any(|s| s.org_short_code == group_name)
+    }
+
+    /// Check if user has a role. If `group_name` is `None`, infer the default
+    /// group (only when exactly 1 exists).
+    pub fn has_role(&self, role_name: &str, group_name: Option<&str>) -> Result<bool, String> {
+        self.resolve_group(group_name)
+            .map(|summary| summary.role == role_name)
+    }
+
+    /// Check if user has a single permission.
     pub fn has_permission(
         &self,
         perm_name: &str,
         group_name: Option<&str>,
     ) -> Result<bool, String> {
-        let group_fq = AuthHelper::resolve_group_from_summaries(
-            &self.summaries,
-            &self.claims.owner,
-            group_name,
-        )?;
-
-        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
-            Ok(summary.permissions.contains(&perm_name.to_string()))
-        } else {
-            Ok(false)
-        }
+        self.resolve_group(group_name)
+            .map(|summary| summary.permissions.iter().any(|p| p == perm_name))
     }
 
-    /// Check if user has ALL provided permissions (Exhaustive check).
+    /// Check if user has ALL provided permissions (exhaustive).
     pub fn has_permissions(
         &self,
         perm_names: &[String],
         group_name: Option<&str>,
     ) -> Result<bool, String> {
-        let group_fq = AuthHelper::resolve_group_from_summaries(
-            &self.summaries,
-            &self.claims.owner,
-            group_name,
-        )?;
-
-        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
-            // Check if all requested permissions exist in the summary
-            let all_exist = perm_names.iter().all(|p| summary.permissions.contains(p));
-            Ok(all_exist)
-        } else {
-            Ok(false)
-        }
+        let summary = self.resolve_group(group_name)?;
+        Ok(perm_names
+            .iter()
+            .all(|name| summary.permissions.iter().any(|p| p == name)))
     }
 
-    /// Check if user has ANY of the provided permissions (Iterative check).
+    /// Check if user has ANY of the provided permissions (existential).
     pub fn has_permissions_any(
         &self,
         perm_names: &[String],
         group_name: Option<&str>,
     ) -> Result<bool, String> {
-        let group_fq = AuthHelper::resolve_group_from_summaries(
-            &self.summaries,
-            &self.claims.owner,
-            group_name,
-        )?;
-
-        if let Some(summary) = self.summaries.iter().find(|s| s.org_name == group_fq) {
-            // Check if any requested permission exists in the summary
-            let any_exist = perm_names.iter().any(|p| summary.permissions.contains(p));
-            Ok(any_exist)
-        } else {
-            Ok(false)
-        }
+        let summary = self.resolve_group(group_name)?;
+        Ok(perm_names
+            .iter()
+            .any(|name| summary.permissions.iter().any(|p| p == name)))
     }
 
     pub fn is_admin(&self) -> bool {
@@ -374,7 +301,7 @@ pub struct AuthHelper {
 impl AuthHelper {
     pub fn new(certificate_pem: &str) -> Result<Self, String> {
         let decoding_key = DecodingKey::from_rsa_pem(certificate_pem.as_bytes())
-            .map_err(|e| format!("Invalid Public Key: {}", e))?;
+            .map_err(|e| format!("Invalid RSA public key: {}", e))?;
 
         let mut validation = Validation::new(Algorithm::RS256);
         validation.leeway = 60;
@@ -390,107 +317,13 @@ impl AuthHelper {
     pub fn parse_user(&self, jwt: &str) -> Result<CasdoorUser, String> {
         let claims = decode::<CasdoorClaims>(jwt, &self.decoding_key, &self.validation)
             .map(|td| td.claims)
-            .map_err(|e| format!("JWT Validation Failed: {}", e))?;
+            .map_err(|e| format!("JWT validation failed: {}", e))?;
 
-        Ok(CasdoorUser::new(claims))
+        CasdoorUser::new(claims)
     }
 
     pub fn is_valid(&self, jwt: &str) -> bool {
         self.parse_user(jwt).is_ok()
-    }
-
-    // =========================================================================
-    //  STATIC HELPERS
-    // =========================================================================
-
-    fn qualify_group(claims: &CasdoorClaims, group_name: &str) -> String {
-        if group_name.contains('/') {
-            group_name.to_string()
-        } else {
-            format!("{}/{}", claims.owner, group_name)
-        }
-    }
-
-    fn collect_all_groups(claims: &CasdoorClaims) -> Vec<String> {
-        let user_roles = claims.roles.as_deref().unwrap_or(&[]);
-        let direct_groups = claims.groups.as_deref().unwrap_or(&[]);
-
-        let mut all: Vec<String> = Vec::new();
-        let mut add = |g: &str| {
-            if !g.is_empty() && !all.contains(&g.to_string()) {
-                all.push(g.to_string());
-            }
-        };
-
-        for g in direct_groups {
-            add(g);
-        }
-        for role in user_roles {
-            if let Some(ref gs) = role.groups {
-                for g in gs {
-                    add(g);
-                }
-            }
-        }
-        all
-    }
-
-    fn resolve_group_from_summaries(
-        summaries: &[GroupAuthSummary],
-        owner: &str,
-        group_name: Option<&str>,
-    ) -> Result<String, String> {
-        if let Some(name) = group_name {
-            if name.contains('/') {
-                return Ok(name.to_string());
-            } else {
-                return Ok(format!("{}/{}", owner, name));
-            }
-        }
-
-        match summaries.len() {
-            0 => Err("No group specified and user belongs to no groups.".to_string()),
-            1 => Ok(summaries[0].org_name.clone()),
-            n => {
-                let names: Vec<&str> = summaries.iter().map(|s| s.org_name.as_str()).collect();
-                Err(format!(
-                    "No group specified and user belongs to {} groups: [{}]. Explicit group required.",
-                    n,
-                    names.join(", ")
-                ))
-            }
-        }
-    }
-
-    fn roles_for_group<'a>(roles: &'a [CasdoorRole], group_fq: &str) -> Vec<&'a CasdoorRole> {
-        roles
-            .iter()
-            .filter(|r| {
-                r.is_enabled
-                    && r.groups
-                        .as_ref()
-                        .is_some_and(|gs| gs.iter().any(|g| g == group_fq))
-            })
-            .collect()
-    }
-
-    fn user_has_role_ref_for_group(
-        user_roles: &[CasdoorRole],
-        role_ref: &str,
-        group_fq: &str,
-    ) -> bool {
-        if let Some((role_owner, role_name)) = role_ref.split_once('/') {
-            user_roles.iter().any(|r| {
-                r.owner == role_owner
-                    && r.name == role_name
-                    && r.is_enabled
-                    && r.groups
-                        .as_ref()
-                        .is_some_and(|gs| gs.iter().any(|g| g == group_fq))
-            })
-        } else {
-            false
-        }
     }
 }
 

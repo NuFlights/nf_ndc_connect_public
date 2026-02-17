@@ -17,37 +17,37 @@ It handles JWT validation, Role-Based Access Control (RBAC) checks, and parsing 
 
 ```bash
 cargo add nf_ndc_connect_public
-
 ```
 
 ### 🐍 Python
 
 ```bash
 pip install nf_ndc_connect_public
-
 ```
 
 ### 📦 Node.js (npm)
 
 ```bash
 npm install @dhilipsiva/nf_ndc_connect_public
-
 ```
 
 ---
 
 ## 🔑 Organization Context & Auto-Resolution
 
-**New in this version:** The library now uses a **Context Object Pattern**. You validate the JWT once to get a `User` object, which holds the parsed state.
+The library uses a **Context Object Pattern**. You validate the JWT once to get a `User` object, which holds the parsed state including pre-computed group summaries.
+
+Each summary contains:
+* `org_short_code` — The short name of the group (the part after `/` in a fully-qualified group name like `owner/group_name`).
+* `role` — The role the user holds in that group.
+* `permissions` — Permissions scoped to that role.
 
 When checking roles or permissions on this `User` object:
 
-* **Explicit Context:** If you provide an `group_id` (Organization ID), checks are performed strictly against that organization.
-* **Auto-Resolution:** If you omit `group_id` (pass `None` / `null`):
-* If the user belongs to **exactly one** organization, that organization is used automatically.
-* If the user belongs to **multiple** organizations (or zero), the function returns an **Error** (Ambiguous Context).
-
-
+* **Explicit Context:** If you provide a `group_name` (the `org_short_code`), checks are performed strictly against that group's summary.
+* **Auto-Resolution:** If you omit `group_name` (pass `None` / `null`):
+  * If the user belongs to **exactly one** group, that group is used automatically.
+  * If the user belongs to **multiple** groups (or zero), the function returns an **Error** (Ambiguous Context).
 
 ---
 
@@ -76,22 +76,28 @@ except ValueError as e:
     exit(1)
 
 # 3. Check Single Role/Permission (Explicit Context)
-group_id = "dhilipsiva_dev/nf-apex"
-if user.has_role("nf-apex-adm", group_id):
+# NOTE: Use the org_short_code, not the fully-qualified group name
+group_name = "nf-apex"
+if user.has_role("nf-apex-adm", group_name):
     print("User is Admin!")
 
 # 4. Check Multiple Permissions
 # has_permissions = ALL must match (AND)
-if user.has_permissions(["read", "write"], group_id):
+if user.has_permissions(["read", "write"], group_name):
     print("User has full R/W access")
 
 # has_permissions_any = AT LEAST ONE must match (OR)
-if user.has_permissions_any(["edit", "admin"], group_id):
+if user.has_permissions_any(["edit", "admin"], group_name):
     print("User has elevated privileges")
 
 # 5. Get full authorization tree
 print(json.loads(user.get_auth_summary()))
 
+# 6. Convenience getters
+print(user.username)          # User's name
+print(user.email)             # User's email
+print(user.dj_id)             # User's id_card
+print(user.org_short_codes)   # All org short codes
 ```
 
 ### 📦 Node.js / Web Example
@@ -104,22 +110,23 @@ import { IdpAuthHelper } from "@dhilipsiva/nf_ndc_connect_public";
 const helper = new IdpAuthHelper(publicKey);
 const user = helper.validate(rawJwt);
 
-const groupId = "dhilipsiva_dev/nf-apex";
+// NOTE: Use the org_short_code, not the fully-qualified group name
+const groupName = "nf-apex";
 
 // 1. Single Check
-if (user.hasPermission("write", groupId)) {
+if (user.hasPermission("write", groupName)) {
     console.log("Can write!");
 }
 
 // 2. Multiple Permissions (Exhaustive - AND)
 // Returns true only if user has BOTH "read" AND "write"
-if (user.hasPermissions(["read", "write"], groupId)) {
+if (user.hasPermissions(["read", "write"], groupName)) {
     console.log("Full Access");
 }
 
 // 3. Multiple Permissions (Iterative - OR)
 // Returns true if user has EITHER "edit" OR "delete"
-if (user.hasPermissionsAny(["edit", "delete"], groupId)) {
+if (user.hasPermissionsAny(["edit", "delete"], groupName)) {
     console.log("Can modify content");
 }
 
@@ -130,6 +137,10 @@ try {
     console.error("Ambiguous Context:", e.message);
 }
 
+// 5. Convenience getters
+console.log(user.username);
+console.log(user.email);
+console.log(user.isAdmin);
 ```
 
 ### 🦀 Rust Example
@@ -142,8 +153,9 @@ use nf_ndc_connect_public::AuthHelper;
 fn main() {
     let helper = AuthHelper::new(public_key).unwrap();
     let user = helper.parse_user(jwt).unwrap();
-    
-    let group = Some("dhilipsiva_dev/nf-apex");
+
+    // NOTE: Use the org_short_code, not the fully-qualified group name
+    let group = Some("nf-apex");
 
     // 1. Single Check
     if user.has_permission("read", group).unwrap() {
@@ -152,7 +164,7 @@ fn main() {
 
     // 2. Multiple Checks (Vec<String>)
     let required = vec!["read".to_string(), "write".to_string()];
-    
+
     // Check ALL
     if user.has_permissions(&required, group).unwrap() {
         println!("Has all permissions");
@@ -162,8 +174,12 @@ fn main() {
     if user.has_permissions_any(&required, group).unwrap() {
         println!("Has at least one permission");
     }
-}
 
+    // 3. Convenience accessors
+    println!("{}", user.username());
+    println!("{:?}", user.email());
+    println!("{}", user.get_org_count());
+}
 ```
 
 ---
@@ -181,7 +197,6 @@ This project uses **Nix** for a reproducible environment and **Just** for comman
 
 ```bash
 nix develop
-
 ```
 
 ### Build Commands (via `just`)

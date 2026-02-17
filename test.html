@@ -73,35 +73,31 @@
                     );
                     if (!isValid) return;
 
-                    // --- NEW: Generate Context Object ---
                     const user = helper.validate(rawJwt);
-                    // debugger;
                     log("✅ User Context Parsed", "success");
 
-                    // 5. List Groups
-                    // Accessed via getter property .summaries on the user object
-                    const groups = user.summaries;
+                    // 5. List Group Summaries
+                    const summaries = user.summaries;
 
-                    log(`<br>📂 <b>User Groups:</b>`);
-                    groups.forEach((g) => {
-                        const tag = g.is_direct_member
-                            ? "(direct)"
-                            : "(via role)";
+                    log(`<br>📂 <b>User Group Summaries:</b>`);
+                    summaries.forEach((s) => {
                         log(
-                            `&nbsp;&nbsp;🏢 <b>${g.group_name}</b> [${g.group}] ${tag}`,
+                            `&nbsp;&nbsp;🏢 <b>${s.org_short_code}</b>`,
                         );
-                        g.roles.forEach((r) =>
-                            log(`&nbsp;&nbsp;&nbsp;&nbsp;🎭 Role: ${r}`),
+                        log(
+                            `&nbsp;&nbsp;&nbsp;&nbsp;🎭 Role: ${s.role}`,
                         );
-                        g.permissions.forEach((p) =>
+                        s.permissions.forEach((p) =>
                             log(`&nbsp;&nbsp;&nbsp;&nbsp;🔑 Permission: ${p}`),
                         );
                     });
 
-                    // 6. Check group membership
-                    const testGroup = "group_test_dhilipsiva1"; // Adjust to match your data
+                    // Use real values from the sample JWT
+                    const testGroup = "T-EK";
+                    const testRole = "role_dhilipsiva_1";
+                    const testPerm = "permission_dhilipsiva_1";
 
-                    // Call on 'user', no jwt arg
+                    // 6. Check group membership
                     const hasGrp = user.hasGroup(testGroup);
                     log(
                         `<br>🔹 hasGroup('${testGroup}'): <b>${hasGrp}</b>`,
@@ -109,9 +105,6 @@
                     );
 
                     // 7. Check role for a specific group
-                    const testRole = "role_dhilipsiva_1"; // Adjust to match your data
-
-                    // Renamed to hasRole, called on user
                     const hasRole = user.hasRole(testRole, testGroup);
                     log(
                         `<br>🔹 hasRole('${testRole}', '${testGroup}'): <b>${hasRole}</b>`,
@@ -119,26 +112,24 @@
                     );
 
                     // 8. Check permission for a specific group
-                    const testPerm = "permission_dhilipsiva_1"; // Adjust to match your data
-
-                    // Renamed to hasPermission, called on user
                     const hasPerm = user.hasPermission(testPerm, testGroup);
                     log(
                         `<br>🔹 hasPermission('${testPerm}', '${testGroup}'): <b>${hasPerm}</b>`,
                         hasPerm ? "success" : "fail",
                     );
 
-                    // --- NEW: Check Multiple Permissions ---
-                    
-                    // 8a. hasPermissions (ALL must exist)
-                    const reqPermsAll = ["permission_dhilipsiva_1", "permission_dhilipsiva_2"]; 
+                    // 9. Check Multiple Permissions
+
+                    // 9a. hasPermissions (ALL must exist)
+                    // T-EK has: permission_dhilipsiva_2, permission_dhilipsiva_1
+                    const reqPermsAll = ["permission_dhilipsiva_1", "permission_dhilipsiva_2"];
                     const hasAll = user.hasPermissions(reqPermsAll, testGroup);
                     log(
                         `<br>🔹 hasPermissions(['${reqPermsAll.join("', '")}'], '${testGroup}'): <b>${hasAll}</b>`,
-                        hasAll ? "success" : "fail", // Update based on your actual test data expectations
+                        hasAll ? "success" : "fail",
                     );
 
-                    // 8b. hasPermissionsAny (AT LEAST ONE must exist)
+                    // 9b. hasPermissionsAny (AT LEAST ONE must exist)
                     const reqPermsAny = ["permission_dhilipsiva_1", "permission_fake_99"];
                     const hasAny = user.hasPermissionsAny(reqPermsAny, testGroup);
                     log(
@@ -146,8 +137,7 @@
                         hasAny ? "success" : "fail",
                     );
 
-
-                    // 9. Optional group — omit group_name (should error if user has >1 group)
+                    // 10. Optional group — omit group_name (should error since user has 2 groups)
                     log(`<br>⚙️ <b>Testing optional group (null):</b>`);
 
                     try {
@@ -164,22 +154,24 @@
                     }
 
                     try {
-                        // Testing plural check with null group
                         const result = user.hasPermissionsAny(["some_perm"], null);
                         log(
                             `🔹 hasPermissionsAny(['some_perm'], null): <b>${result}</b>`,
                             "success",
                         );
                     } catch (e) {
-                         log(
+                        log(
                             `⚠️ hasPermissionsAny(['some_perm'], null): <b>${e.message}</b>`,
                             "warn",
                         );
                     }
 
-                    // 10. Admin checks (Getters on user object)
+                    // 11. Admin checks (Getters on user object)
                     log(`<br>🔹 isAdmin: <b>${user.isAdmin}</b>`);
                     log(`🔹 isGlobalAdmin: <b>${user.isGlobalAdmin}</b>`);
+                    log(`🔹 username: <b>${user.username}</b>`);
+                    log(`🔹 email: <b>${user.email}</b>`);
+                    log(`🔹 dj_id: <b>${user.dj_id}</b>`);
                 } catch (e) {
                     console.error(e);
                     log(`❌ Error: ${e.message}`, "fail");
