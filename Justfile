@@ -8,11 +8,11 @@ default:
 
 # Build Python Wheel (Develop)
 py-dev:
-    maturin develop --features python
+    maturin develop --features python,login
 
 # Build Python Wheel (Release)
 py-build:
-    maturin build --release --out dist --features python
+    maturin build --release --out dist --features python,login
 
 # Build Wasm Package (Node/Web)
 wasm:

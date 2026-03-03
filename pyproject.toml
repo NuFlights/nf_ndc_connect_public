@@ -1,6 +1,6 @@
 [project]
 name = "nf_ndc_connect_public"
-version = "0.7.0"
+version = "0.8.0"
 description = "Add your description here"
 authors = [
     { name = "dhilipsiva", email = "dhilipsiva@pm.me" }
@@ -18,4 +18,4 @@ managed = true
 dev-dependencies = []
 
 [tool.maturin]
-features = ["python"]
+features = ["python", "login"]
