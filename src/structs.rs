@@ -14,17 +14,11 @@ pub struct CasdoorRole {
     #[serde(default)]
     pub display_name: String,
     #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
     pub groups: Vec<String>,
-    #[serde(default)]
-    pub is_enabled: bool,
 }
 
 impl CasdoorRole {
-    /// Returns the fully-qualified role reference: `{owner}/{name}`
-    #[inline]
-    pub fn qualified_name(&self) -> String {
+    fn qualified_name(&self) -> String {
         format!("{}/{}", self.owner, self.name)
     }
 }
@@ -33,19 +27,11 @@ impl CasdoorRole {
 #[serde(rename_all = "camelCase")]
 pub struct CasdoorPermission {
     #[serde(default)]
-    pub owner: String,
-    #[serde(default)]
     pub name: String,
     #[serde(default)]
-    pub display_name: Option<String>,
+    pub display_name: String,
     #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub roles: Option<Vec<String>>,
-    #[serde(default)]
-    pub actions: Option<Vec<String>>,
-    #[serde(default)]
-    pub is_enabled: bool,
+    pub roles: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -53,39 +39,19 @@ pub struct CasdoorPermission {
 pub struct CasdoorClaims {
     // --- User identity ---
     #[serde(default)]
-    pub owner: String,
-    #[serde(default)]
     pub name: String,
     #[serde(default)]
     pub id: Option<String>,
     #[serde(default)]
     pub id_card: String,
-    #[serde(default, rename = "type")]
-    pub user_type: Option<String>,
-    #[serde(default)]
-    pub display_name: Option<String>,
-    #[serde(default)]
-    pub first_name: Option<String>,
-    #[serde(default)]
-    pub last_name: Option<String>,
-    #[serde(default)]
-    pub avatar: Option<String>,
     #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
     pub email_verified: Option<bool>,
-    #[serde(default)]
-    pub phone: Option<String>,
-    #[serde(default)]
-    pub country_code: Option<String>,
-    #[serde(default)]
-    pub tag: Option<String>,
 
     // --- Admin flags ---
     #[serde(default)]
     pub is_admin: bool,
-    #[serde(default)]
-    pub is_global_admin: bool,
     #[serde(default)]
     pub is_forbidden: bool,
     #[serde(default)]
@@ -132,9 +98,6 @@ impl CasdoorUser {
 
         for role in &claims.roles {
             // Skip disabled roles
-            if !role.is_enabled {
-                continue;
-            }
 
             if role.groups.is_empty() {
                 return Err(format!(
@@ -149,14 +112,7 @@ impl CasdoorUser {
             let perm_names: Vec<String> = claims
                 .permissions
                 .iter()
-                .filter(|p| {
-                    p.is_enabled
-                        && p.roles.as_ref().is_some_and(|perm_roles| {
-                            perm_roles
-                                .iter()
-                                .any(|role_ref| role_ref == &qualified_role)
-                        })
-                })
+                .filter(|p| p.roles.iter().any(|role_ref| role_ref == &qualified_role))
                 .map(|p| p.name.clone())
                 .collect();
 
@@ -190,7 +146,10 @@ impl CasdoorUser {
     /// - If `group_name` is provided, returns all summaries matching that group.
     /// - If `None` and exactly 1 distinct org exists, returns all summaries for that org.
     /// - Otherwise, errors with an ambiguity message.
-    fn resolve_summaries(&self, group_name: Option<&str>) -> Result<Vec<&GroupAuthSummary>, String> {
+    fn resolve_summaries(
+        &self,
+        group_name: Option<&str>,
+    ) -> Result<Vec<&GroupAuthSummary>, String> {
         match group_name {
             Some(g) => {
                 let matches: Vec<&GroupAuthSummary> = self
@@ -290,10 +249,6 @@ impl CasdoorUser {
         self.claims.is_admin
     }
 
-    pub fn is_global_admin(&self) -> bool {
-        self.claims.is_global_admin
-    }
-
     pub fn get_org_count(&self) -> usize {
         let mut orgs: Vec<&str> = self
             .summaries
@@ -337,22 +292,19 @@ impl CasdoorUser {
 mod tests {
     use super::*;
 
-    fn make_role(name: &str, groups: Vec<&str>, enabled: bool) -> CasdoorRole {
+    fn make_role(name: &str, groups: Vec<&str>) -> CasdoorRole {
         CasdoorRole {
             owner: "test_org".into(),
             name: name.into(),
             groups: groups.into_iter().map(|g| g.to_string()).collect(),
-            is_enabled: enabled,
             ..Default::default()
         }
     }
 
-    fn make_permission(name: &str, roles: Vec<&str>, enabled: bool) -> CasdoorPermission {
+    fn make_permission(name: &str, roles: Vec<&str>) -> CasdoorPermission {
         CasdoorPermission {
-            owner: "test_org".into(),
             name: name.into(),
-            roles: Some(roles.into_iter().map(|r| r.to_string()).collect()),
-            is_enabled: enabled,
+            roles: roles.into_iter().map(|r| r.to_string()).collect(),
             ..Default::default()
         }
     }
@@ -363,9 +315,8 @@ mod tests {
             roles: vec![make_role(
                 "admin",
                 vec!["test_org/GroupA", "test_org/GroupB"],
-                true,
             )],
-            permissions: vec![make_permission("read", vec!["test_org/admin"], true)],
+            permissions: vec![make_permission("read", vec!["test_org/admin"])],
             ..Default::default()
         };
         let user = CasdoorUser::new(claims).unwrap();
@@ -377,24 +328,9 @@ mod tests {
     }
 
     #[test]
-    fn test_disabled_role_skipped() {
-        let claims = CasdoorClaims {
-            roles: vec![
-                make_role("active_role", vec!["test_org/GroupA"], true),
-                make_role("disabled_role", vec!["test_org/GroupB"], false),
-            ],
-            permissions: vec![],
-            ..Default::default()
-        };
-        let user = CasdoorUser::new(claims).unwrap();
-        assert_eq!(user.summaries.len(), 1);
-        assert_eq!(user.summaries[0].role, "active_role");
-    }
-
-    #[test]
     fn test_role_with_no_groups_errors() {
         let claims = CasdoorClaims {
-            roles: vec![make_role("orphan", vec![], true)],
+            roles: vec![make_role("orphan", vec![])],
             permissions: vec![],
             ..Default::default()
         };
@@ -404,23 +340,11 @@ mod tests {
     }
 
     #[test]
-    fn test_disabled_role_with_no_groups_ok() {
-        // A disabled role with no groups should be silently skipped, not error
-        let claims = CasdoorClaims {
-            roles: vec![make_role("disabled_orphan", vec![], false)],
-            permissions: vec![],
-            ..Default::default()
-        };
-        let user = CasdoorUser::new(claims).unwrap();
-        assert_eq!(user.summaries.len(), 0);
-    }
-
-    #[test]
     fn test_has_role_multi_summary_same_org() {
         let claims = CasdoorClaims {
             roles: vec![
-                make_role("admin", vec!["test_org/OrgX"], true),
-                make_role("viewer", vec!["test_org/OrgX"], true),
+                make_role("admin", vec!["test_org/OrgX"]),
+                make_role("viewer", vec!["test_org/OrgX"]),
             ],
             permissions: vec![],
             ..Default::default()
@@ -435,12 +359,12 @@ mod tests {
     fn test_has_permission_across_roles_same_org() {
         let claims = CasdoorClaims {
             roles: vec![
-                make_role("admin", vec!["test_org/OrgX"], true),
-                make_role("viewer", vec!["test_org/OrgX"], true),
+                make_role("admin", vec!["test_org/OrgX"]),
+                make_role("viewer", vec!["test_org/OrgX"]),
             ],
             permissions: vec![
-                make_permission("write", vec!["test_org/admin"], true),
-                make_permission("read", vec!["test_org/viewer"], true),
+                make_permission("write", vec!["test_org/admin"]),
+                make_permission("read", vec!["test_org/viewer"]),
             ],
             ..Default::default()
         };
@@ -454,31 +378,29 @@ mod tests {
     fn test_has_permissions_union_across_roles() {
         let claims = CasdoorClaims {
             roles: vec![
-                make_role("admin", vec!["test_org/OrgX"], true),
-                make_role("viewer", vec!["test_org/OrgX"], true),
+                make_role("admin", vec!["test_org/OrgX"]),
+                make_role("viewer", vec!["test_org/OrgX"]),
             ],
             permissions: vec![
-                make_permission("write", vec!["test_org/admin"], true),
-                make_permission("read", vec!["test_org/viewer"], true),
+                make_permission("write", vec!["test_org/admin"]),
+                make_permission("read", vec!["test_org/viewer"]),
             ],
             ..Default::default()
         };
         let user = CasdoorUser::new(claims).unwrap();
         // "write" from admin + "read" from viewer should both be found
-        assert!(user
-            .has_permissions(
-                &["write".to_string(), "read".to_string()],
-                Some("OrgX")
-            )
-            .unwrap());
+        assert!(
+            user.has_permissions(&["write".to_string(), "read".to_string()], Some("OrgX"))
+                .unwrap()
+        );
     }
 
     #[test]
     fn test_get_org_count_deduplicates() {
         let claims = CasdoorClaims {
             roles: vec![
-                make_role("admin", vec!["test_org/OrgX"], true),
-                make_role("viewer", vec!["test_org/OrgX"], true),
+                make_role("admin", vec!["test_org/OrgX"]),
+                make_role("viewer", vec!["test_org/OrgX"]),
             ],
             permissions: vec![],
             ..Default::default()
@@ -493,8 +415,8 @@ mod tests {
     fn test_get_org_short_codes_deduplicates() {
         let claims = CasdoorClaims {
             roles: vec![
-                make_role("admin", vec!["test_org/OrgX", "test_org/OrgY"], true),
-                make_role("viewer", vec!["test_org/OrgX"], true),
+                make_role("admin", vec!["test_org/OrgX", "test_org/OrgY"]),
+                make_role("viewer", vec!["test_org/OrgX"]),
             ],
             permissions: vec![],
             ..Default::default()
@@ -508,8 +430,8 @@ mod tests {
     fn test_ambiguous_group_requires_explicit() {
         let claims = CasdoorClaims {
             roles: vec![
-                make_role("admin", vec!["test_org/OrgA"], true),
-                make_role("viewer", vec!["test_org/OrgB"], true),
+                make_role("admin", vec!["test_org/OrgA"]),
+                make_role("viewer", vec!["test_org/OrgB"]),
             ],
             permissions: vec![],
             ..Default::default()
@@ -522,27 +444,12 @@ mod tests {
     #[test]
     fn test_single_org_auto_resolves() {
         let claims = CasdoorClaims {
-            roles: vec![make_role("admin", vec!["test_org/OrgA"], true)],
-            permissions: vec![make_permission("read", vec!["test_org/admin"], true)],
+            roles: vec![make_role("admin", vec!["test_org/OrgA"])],
+            permissions: vec![make_permission("read", vec!["test_org/admin"])],
             ..Default::default()
         };
         let user = CasdoorUser::new(claims).unwrap();
         assert!(user.has_role("admin", None).unwrap());
         assert!(user.has_permission("read", None).unwrap());
-    }
-
-    #[test]
-    fn test_disabled_permission_not_included() {
-        let claims = CasdoorClaims {
-            roles: vec![make_role("admin", vec!["test_org/OrgA"], true)],
-            permissions: vec![
-                make_permission("read", vec!["test_org/admin"], true),
-                make_permission("write", vec!["test_org/admin"], false),
-            ],
-            ..Default::default()
-        };
-        let user = CasdoorUser::new(claims).unwrap();
-        assert!(user.has_permission("read", None).unwrap());
-        assert!(!user.has_permission("write", None).unwrap());
     }
 }

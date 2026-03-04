@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public -name \"*.toml\" -type f)",
+      "Bash(ls -la //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/src/)",
+      "Bash(grep -r \"device\\\\|poll\\\\|code\\\\|auth\" //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/src/)",
+      "Bash(ls -la //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/.github/)",
+      "Bash(find //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public -type f \\\\\\( -name \"*.py\" -o -name \"test*.rs\" -o -name \"*test*\" \\\\\\))",
+      "Bash(cat //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/.github/workflows/*)",
+      "Bash(grep -r \"env\\\\|ENV\\\\|config\\\\|CONFIG\" //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/src --include=\"*.rs\")",
+      "Bash(grep -r \"base64\\\\|decode\\\\|encode\" //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/src --include=\"*.rs\")",
+      "Bash(ls -la //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/scripts/)",
+      "Bash(ls -la //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/pkg/)",
+      "Bash(find //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public -name \"*.sh\" -o -name \"Justfile\")",
+      "Bash(grep -n \"mod test\\\\|#\\\\[test\\\\|#\\\\[cfg.*test\" //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/src/lib.rs)",
+      "Bash(cat //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/Cargo.lock)",
+      "Bash(ls //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/.github/workflows/)",
+      "Bash(ls //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public/src/)",
+      "Bash(cargo build)",
+      "Bash(CARGO_INCREMENTAL=0 cargo build)",
+      "Bash(CARGO_INCREMENTAL=0 cargo test)",
+      "Bash(CARGO_INCREMENTAL=0 cargo build --features login)",
+      "Bash(CARGO_INCREMENTAL=0 cargo test --features login)",
+      "Bash(CARGO_INCREMENTAL=0 cargo check)",
+      "Bash(cd //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d[k] for k in [''name'',''roles'',''permissions'',''groups'',''isAdmin'',''isGlobalAdmin'',''email'',''idCard'',''phone'']}, indent=2\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); roles=[{''name'':r[''name''],''groups'':r[''groups''],''isEnabled'':r[''isEnabled'']} for r in d.get\\(''roles'',[]\\)]; perms=[{''name'':p[''name''],''roles'':p.get\\(''roles'',[]\\),''isEnabled'':p[''isEnabled'']} for p in d.get\\(''permissions'',[]\\)]; print\\(json.dumps\\({''name'':d[''name''],''email'':d.get\\(''email'',''''\\),''idCard'':d.get\\(''idCard'',''''\\),''isAdmin'':d.get\\(''isAdmin'',False\\),''roles'':roles,''permissions'':perms,''groups'':d.get\\(''groups'',[]\\)},indent=2\\)\\)\")",
+      "Bash(git -C //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public status)",
+      "Bash(git config --global --add safe.directory '%\\(prefix\\)///wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public')",
+      "Bash(git add .github/workflows/release.yml Cargo.lock Cargo.toml Justfile pyproject.toml src/lib.rs src/auth.rs src/structs.rs src/login.rs src/bindings/mod.rs src/bindings/python.rs src/bindings/wasm.rs test.html test.py)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

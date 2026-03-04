@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 
-use crate::structs::CasdoorUser;
 use crate::auth::AuthHelper;
+use crate::structs::CasdoorUser;
 
 #[wasm_bindgen(js_name = CasdoorUser)]
 pub struct WasmCasdoorUser {
@@ -72,11 +72,6 @@ impl WasmCasdoorUser {
     #[wasm_bindgen(getter = isAdmin)]
     pub fn is_admin(&self) -> bool {
         self.inner.is_admin()
-    }
-
-    #[wasm_bindgen(getter = isGlobalAdmin)]
-    pub fn is_global_admin(&self) -> bool {
-        self.inner.is_global_admin()
     }
 
     #[wasm_bindgen(js_name = getOrgCount)]

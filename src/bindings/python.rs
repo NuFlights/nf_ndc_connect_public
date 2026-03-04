@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
-use crate::structs::CasdoorUser;
 use crate::auth::AuthHelper;
+use crate::structs::CasdoorUser;
 
 #[pyclass(name = "CasdoorUser")]
 pub struct PyCasdoorUser {
@@ -69,11 +69,6 @@ impl PyCasdoorUser {
     #[getter]
     fn is_admin(&self) -> bool {
         self.inner.is_admin()
-    }
-
-    #[getter]
-    fn is_global_admin(&self) -> bool {
-        self.inner.is_global_admin()
     }
 
     pub fn get_org_count(&self) -> usize {
