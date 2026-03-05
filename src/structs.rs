@@ -70,7 +70,7 @@ pub struct CasdoorClaims {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GroupAuthSummary {
-    pub org_short_code: String,
+    pub group: String,
     pub role: String,
     pub permissions: Vec<String>,
 }
@@ -129,7 +129,7 @@ impl CasdoorUser {
                     })?;
 
                 summaries.push(GroupAuthSummary {
-                    org_short_code,
+                    group: org_short_code,
                     role: role.name.clone(),
                     permissions: perm_names.clone(),
                 });
@@ -152,11 +152,8 @@ impl CasdoorUser {
     ) -> Result<Vec<&GroupAuthSummary>, String> {
         match group_name {
             Some(g) => {
-                let matches: Vec<&GroupAuthSummary> = self
-                    .summaries
-                    .iter()
-                    .filter(|s| s.org_short_code == g)
-                    .collect();
+                let matches: Vec<&GroupAuthSummary> =
+                    self.summaries.iter().filter(|s| s.group == g).collect();
                 if matches.is_empty() {
                     Err(format!("No summary found for group '{}'", g))
                 } else {
@@ -164,11 +161,8 @@ impl CasdoorUser {
                 }
             }
             None => {
-                let mut distinct_orgs: Vec<&str> = self
-                    .summaries
-                    .iter()
-                    .map(|s| s.org_short_code.as_str())
-                    .collect();
+                let mut distinct_orgs: Vec<&str> =
+                    self.summaries.iter().map(|s| s.group.as_str()).collect();
                 distinct_orgs.sort();
                 distinct_orgs.dedup();
 
@@ -192,9 +186,7 @@ impl CasdoorUser {
 
     /// Check if user belongs to a group.
     pub fn has_group(&self, group_name: &str) -> bool {
-        self.summaries
-            .iter()
-            .any(|s| s.org_short_code == group_name)
+        self.summaries.iter().any(|s| s.group == group_name)
     }
 
     /// Check if user has a role. If `group_name` is `None`, infer the default
@@ -250,18 +242,14 @@ impl CasdoorUser {
     }
 
     pub fn get_org_count(&self) -> usize {
-        let mut orgs: Vec<&str> = self
-            .summaries
-            .iter()
-            .map(|s| s.org_short_code.as_str())
-            .collect();
+        let mut orgs: Vec<&str> = self.summaries.iter().map(|s| s.group.as_str()).collect();
         orgs.sort();
         orgs.dedup();
         orgs.len()
     }
 
     pub fn get_first_org_short_code(&self) -> Option<String> {
-        self.summaries.first().map(|s| s.org_short_code.clone())
+        self.summaries.first().map(|s| s.group.clone())
     }
 
     pub fn username(&self) -> String {
@@ -277,11 +265,7 @@ impl CasdoorUser {
     }
 
     pub fn get_org_short_codes(&self) -> Vec<String> {
-        let mut codes: Vec<String> = self
-            .summaries
-            .iter()
-            .map(|s| s.org_short_code.clone())
-            .collect();
+        let mut codes: Vec<String> = self.summaries.iter().map(|s| s.group.clone()).collect();
         codes.sort();
         codes.dedup();
         codes
@@ -321,8 +305,8 @@ mod tests {
         };
         let user = CasdoorUser::new(claims).unwrap();
         assert_eq!(user.summaries.len(), 2);
-        assert_eq!(user.summaries[0].org_short_code, "GroupA");
-        assert_eq!(user.summaries[1].org_short_code, "GroupB");
+        assert_eq!(user.summaries[0].group, "GroupA");
+        assert_eq!(user.summaries[1].group, "GroupB");
         assert!(user.summaries[0].permissions.contains(&"read".to_string()));
         assert!(user.summaries[1].permissions.contains(&"read".to_string()));
     }
