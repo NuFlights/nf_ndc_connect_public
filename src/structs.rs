@@ -62,6 +62,18 @@ pub struct CasdoorClaims {
     pub roles: Vec<CasdoorRole>,
     #[serde(default)]
     pub permissions: Vec<CasdoorPermission>,
+
+    #[serde(rename = "tokenType")]
+    pub token_type: String,
+    pub scope: String,
+    pub azp: String,
+    pub iss: String,
+    pub sub: String,
+    pub aud: serde_json::Value,
+    pub exp: i64,
+    pub nbf: i64,
+    pub iat: i64,
+    pub jti: String,
 }
 
 // =============================================================================
