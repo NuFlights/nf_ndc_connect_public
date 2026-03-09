@@ -54,7 +54,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: build
-          args: --release --out dist --features python,login --find-interpreter
+          args: --release --out dist --features python,login -i 3.10 3.11 3.12 3.13
           sccache: 'true'
 
       - name: Upload Wheels
