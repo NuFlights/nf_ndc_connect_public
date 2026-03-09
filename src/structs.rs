@@ -228,11 +228,12 @@ impl CasdoorUser {
         group_name: Option<&str>,
     ) -> Result<bool, String> {
         let summaries = self.resolve_summaries(group_name)?;
-        Ok(perm_names.iter().all(|name| {
-            summaries
-                .iter()
-                .any(|s| s.permissions.iter().any(|p| p == name))
-        }))
+        Ok(!perm_names.is_empty()
+            && perm_names.iter().all(|name| {
+                summaries
+                    .iter()
+                    .any(|s| s.permissions.iter().any(|p| p == name))
+            }))
     }
 
     /// Check if user has ANY of the provided permissions (existential).
@@ -435,6 +436,18 @@ mod tests {
         let user = CasdoorUser::new(claims).unwrap();
         assert!(user.has_role("admin", None).is_err());
         assert!(user.has_role("admin", Some("OrgA")).unwrap());
+    }
+
+    #[test]
+    fn test_has_permissions_empty_returns_false() {
+        let claims = CasdoorClaims {
+            roles: vec![make_role("admin", vec!["test_org/OrgX"])],
+            permissions: vec![make_permission("read", vec!["test_org/admin"])],
+            ..Default::default()
+        };
+        let user = CasdoorUser::new(claims).unwrap();
+        assert!(!user.has_permissions(&[], Some("OrgX")).unwrap());
+        assert!(!user.has_permissions_any(&[], Some("OrgX")).unwrap());
     }
 
     #[test]
