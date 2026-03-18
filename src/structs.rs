@@ -99,13 +99,16 @@ pub struct CasdoorUser {
 }
 
 impl CasdoorUser {
-    pub fn new(claims: CasdoorClaims) -> Result<Self, String> {
-        let summaries = Self::compute_summaries(&claims)?;
+    pub fn new(claims: CasdoorClaims, group_prefix: &str) -> Result<Self, String> {
+        let summaries = Self::compute_summaries(&claims, group_prefix)?;
         Ok(Self { claims, summaries })
     }
 
     /// Internal logic to pre-calculate the authentication summaries.
-    fn compute_summaries(claims: &CasdoorClaims) -> Result<Vec<GroupAuthSummary>, String> {
+    fn compute_summaries(
+        claims: &CasdoorClaims,
+        group_prefix: &str,
+    ) -> Result<Vec<GroupAuthSummary>, String> {
         let mut summaries = Vec::new();
 
         for role in &claims.roles {
@@ -130,7 +133,7 @@ impl CasdoorUser {
 
             // Iterate ALL groups for this role
             for group in &role.groups {
-                let org_short_code = group
+                let raw_name = group
                     .split_once('/')
                     .map(|(_, name)| name.to_string())
                     .ok_or_else(|| {
@@ -139,6 +142,17 @@ impl CasdoorUser {
                             group
                         )
                     })?;
+
+                // Strip the configured group prefix (e.g. "dev_test1_AIRLINE1" → "AIRLINE1")
+                let org_short_code = if group_prefix.is_empty() {
+                    raw_name
+                } else {
+                    let prefix_with_sep = format!("{}_", group_prefix);
+                    raw_name
+                        .strip_prefix(&prefix_with_sep)
+                        .unwrap_or(&raw_name)
+                        .to_string()
+                };
 
                 summaries.push(GroupAuthSummary {
                     group: org_short_code,
@@ -316,7 +330,7 @@ mod tests {
             permissions: vec![make_permission("read", vec!["test_org/admin"])],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         assert_eq!(user.summaries.len(), 2);
         assert_eq!(user.summaries[0].group, "GroupA");
         assert_eq!(user.summaries[1].group, "GroupB");
@@ -331,7 +345,7 @@ mod tests {
             permissions: vec![],
             ..Default::default()
         };
-        let result = CasdoorUser::new(claims);
+        let result = CasdoorUser::new(claims, "");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("no group association"));
     }
@@ -346,7 +360,7 @@ mod tests {
             permissions: vec![],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         assert!(user.has_role("admin", Some("OrgX")).unwrap());
         assert!(user.has_role("viewer", Some("OrgX")).unwrap());
         assert!(!user.has_role("editor", Some("OrgX")).unwrap());
@@ -365,7 +379,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         assert!(user.has_permission("write", Some("OrgX")).unwrap());
         assert!(user.has_permission("read", Some("OrgX")).unwrap());
         assert!(!user.has_permission("delete", Some("OrgX")).unwrap());
@@ -384,7 +398,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         // "write" from admin + "read" from viewer should both be found
         assert!(
             user.has_permissions(&["write".to_string(), "read".to_string()], Some("OrgX"))
@@ -402,7 +416,7 @@ mod tests {
             permissions: vec![],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         // Two summaries but one distinct org
         assert_eq!(user.summaries.len(), 2);
         assert_eq!(user.get_org_count(), 1);
@@ -418,7 +432,7 @@ mod tests {
             permissions: vec![],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         let codes = user.get_org_short_codes();
         assert_eq!(codes, vec!["OrgX", "OrgY"]);
     }
@@ -433,7 +447,7 @@ mod tests {
             permissions: vec![],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         assert!(user.has_role("admin", None).is_err());
         assert!(user.has_role("admin", Some("OrgA")).unwrap());
     }
@@ -445,7 +459,7 @@ mod tests {
             permissions: vec![make_permission("read", vec!["test_org/admin"])],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         assert!(!user.has_permissions(&[], Some("OrgX")).unwrap());
         assert!(!user.has_permissions_any(&[], Some("OrgX")).unwrap());
     }
@@ -457,8 +471,58 @@ mod tests {
             permissions: vec![make_permission("read", vec!["test_org/admin"])],
             ..Default::default()
         };
-        let user = CasdoorUser::new(claims).unwrap();
+        let user = CasdoorUser::new(claims, "").unwrap();
         assert!(user.has_role("admin", None).unwrap());
         assert!(user.has_permission("read", None).unwrap());
+    }
+
+    #[test]
+    fn test_group_prefix_stripped() {
+        let claims = CasdoorClaims {
+            roles: vec![make_role(
+                "admin",
+                vec!["test_org/dev_test1_AIRLINE1", "test_org/dev_test1_AIRLINE2"],
+            )],
+            permissions: vec![make_permission("read", vec!["test_org/admin"])],
+            ..Default::default()
+        };
+        let user = CasdoorUser::new(claims, "dev_test1").unwrap();
+        let codes = user.get_org_short_codes();
+        assert_eq!(codes, vec!["AIRLINE1", "AIRLINE2"]);
+        assert!(user.has_group("AIRLINE1"));
+        assert!(user.has_group("AIRLINE2"));
+        assert!(!user.has_group("dev_test1_AIRLINE1"));
+    }
+
+    #[test]
+    fn test_group_prefix_no_match_left_as_is() {
+        let claims = CasdoorClaims {
+            roles: vec![make_role(
+                "admin",
+                vec!["test_org/other_prefix_ORG1", "test_org/PLAIN_ORG"],
+            )],
+            permissions: vec![],
+            ..Default::default()
+        };
+        let user = CasdoorUser::new(claims, "dev_test1").unwrap();
+        let codes = user.get_org_short_codes();
+        assert_eq!(codes, vec!["PLAIN_ORG", "other_prefix_ORG1"]);
+    }
+
+    #[test]
+    fn test_group_prefix_none_no_stripping() {
+        let claims = CasdoorClaims {
+            roles: vec![make_role(
+                "admin",
+                vec!["test_org/dev_test1_AIRLINE1"],
+            )],
+            permissions: vec![],
+            ..Default::default()
+        };
+        let user = CasdoorUser::new(claims, "").unwrap();
+        assert_eq!(
+            user.get_org_short_codes(),
+            vec!["dev_test1_AIRLINE1"]
+        );
     }
 }

@@ -108,8 +108,8 @@ pub struct PyIdpAuthHelper {
 #[pymethods]
 impl PyIdpAuthHelper {
     #[new]
-    fn new(certificate_pem: String) -> PyResult<Self> {
-        let inner = AuthHelper::new(&certificate_pem)
+    fn new(certificate_pem: String, group_prefix: String) -> PyResult<Self> {
+        let inner = AuthHelper::new(&certificate_pem, group_prefix)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
         Ok(PyIdpAuthHelper { inner })
     }

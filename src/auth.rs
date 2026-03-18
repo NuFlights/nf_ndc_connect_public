@@ -12,10 +12,11 @@ use crate::structs::{CasdoorClaims, CasdoorUser};
 pub struct AuthHelper {
     decoding_key: DecodingKey,
     validation: Validation,
+    group_prefix: String,
 }
 
 impl AuthHelper {
-    pub fn new(certificate_pem: &str) -> Result<Self, String> {
+    pub fn new(certificate_pem: &str, group_prefix: String) -> Result<Self, String> {
         let decoding_key = DecodingKey::from_rsa_pem(certificate_pem.as_bytes())
             .map_err(|e| format!("Invalid RSA public key: {}", e))?;
 
@@ -26,6 +27,7 @@ impl AuthHelper {
         Ok(Self {
             decoding_key,
             validation,
+            group_prefix,
         })
     }
 
@@ -71,7 +73,7 @@ impl AuthHelper {
             .map(|td| td.claims)
             .map_err(|e| format!("JWT validation failed: {}", e))?;
 
-        CasdoorUser::new(claims)
+        CasdoorUser::new(claims, &self.group_prefix)
     }
 
     pub fn is_valid(&self, token: &str) -> bool {

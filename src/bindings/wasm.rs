@@ -108,8 +108,8 @@ pub struct WasmIdpAuthHelper {
 #[wasm_bindgen(js_class = IdpAuthHelper)]
 impl WasmIdpAuthHelper {
     #[wasm_bindgen(constructor)]
-    pub fn new(certificate_pem: &str) -> Result<WasmIdpAuthHelper, JsError> {
-        let inner = AuthHelper::new(certificate_pem).map_err(|e| JsError::new(&e))?;
+    pub fn new(certificate_pem: &str, group_prefix: String) -> Result<WasmIdpAuthHelper, JsError> {
+        let inner = AuthHelper::new(certificate_pem, group_prefix).map_err(|e| JsError::new(&e))?;
         Ok(WasmIdpAuthHelper { inner })
     }
 
