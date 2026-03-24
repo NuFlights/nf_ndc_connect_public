@@ -36,6 +36,15 @@ pub struct CasdoorPermission {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct CasdoorMfa {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub mfa_type: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct CasdoorClaims {
     // --- User identity ---
     #[serde(default)]
@@ -56,6 +65,10 @@ pub struct CasdoorClaims {
     pub is_forbidden: bool,
     #[serde(default)]
     pub is_deleted: bool,
+
+    // --- MFA ---
+    #[serde(default)]
+    pub multi_factor_auths: Option<Vec<CasdoorMfa>>,
 
     // --- RBAC ---
     #[serde(default)]
