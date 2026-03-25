@@ -20,7 +20,7 @@ def test_claims():
         raw_jwt = f.read().strip()
 
     print("Initializing Auth Helper with Public Key...")
-    helper = IdpAuthHelper(public_key)
+    helper = IdpAuthHelper(public_key, "connect-development")
     print("Auth Helper Ready")
 
     # 3. Validation Check
@@ -45,87 +45,67 @@ def test_claims():
 
     print("\nUser Group Summaries:")
     for s in summaries:
-        print(f"   org_short_code: {s['org_short_code']}")
+        print(f"   org_short_code: {s['group']}")
         print(f"      Role: {s['role']}")
         for p in s["permissions"]:
             print(f"      Permission: {p}")
 
     # Use real values from the sample JWT
-    # role_dhilipsiva_1 belongs to group "vinod_test_dev/group_test_dhilipsiva1"
-    # role_dhilipsiva_2 belongs to group "vinod_test_dev/group_test_dhilipsiva2"
-    test_group_1 = "group_test_dhilipsiva1"
-    test_group_2 = "group_test_dhilipsiva2"
-    test_role_1 = "role_dhilipsiva_1"
-    test_role_2 = "role_dhilipsiva_2"
-    test_perm_1 = "permission_dhilipsiva_1"  # role_1 only
-    test_perm_2 = "permission_dhilipsiva_2"  # both roles
-    test_perm_3 = "permission_dhilipsiva_3"  # role_2 only
+    # Single role: account.custom.KEixtFTW
+    # Single group: connect-development/connect-development_T-2345
+    # After stripping group_prefix "connect-development_", short code = "T-2345"
+    test_group = "T-2345"
+    test_role = "account.custom.KEixtFTW"
+    test_perm_1 = "agencies.view"
+    test_perm_2 = "travel.orders.create"
+    test_perm_nonexistent = "nonexistent.permission"
 
     # 5. Check role
-    has_role = user.has_role(test_role_1, test_group_1)
-    print(f"\n   has_role('{test_role_1}', '{test_group_1}'): {has_role}")
-    assert has_role, "Expected role_dhilipsiva_1 in group_test_dhilipsiva1"
-
-    has_role_2 = user.has_role(test_role_2, test_group_2)
-    print(f"   has_role('{test_role_2}', '{test_group_2}'): {has_role_2}")
-    assert has_role_2, "Expected role_dhilipsiva_2 in group_test_dhilipsiva2"
+    has_role = user.has_role(test_role, test_group)
+    print(f"\n   has_role('{test_role}', '{test_group}'): {has_role}")
+    assert has_role, f"Expected {test_role} in {test_group}"
 
     # 6. Check single permission
-    has_perm = user.has_permission(test_perm_1, test_group_1)
-    print(f"   has_permission('{test_perm_1}', '{test_group_1}'): {has_perm}")
-    assert has_perm, "Expected permission_dhilipsiva_1 in group_test_dhilipsiva1"
+    has_perm = user.has_permission(test_perm_1, test_group)
+    print(f"   has_permission('{test_perm_1}', '{test_group}'): {has_perm}")
+    assert has_perm, f"Expected {test_perm_1} in {test_group}"
 
-    # permission_dhilipsiva_2 references both roles, so available in both groups
-    has_perm_shared = user.has_permission(test_perm_2, test_group_1)
-    print(f"   has_permission('{test_perm_2}', '{test_group_1}'): {has_perm_shared}")
-    assert has_perm_shared, "Expected permission_dhilipsiva_2 in group_test_dhilipsiva1"
+    has_perm_2 = user.has_permission(test_perm_2, test_group)
+    print(f"   has_permission('{test_perm_2}', '{test_group}'): {has_perm_2}")
+    assert has_perm_2, f"Expected {test_perm_2} in {test_group}"
 
-    has_perm_shared_2 = user.has_permission(test_perm_2, test_group_2)
-    print(f"   has_permission('{test_perm_2}', '{test_group_2}'): {has_perm_shared_2}")
-    assert has_perm_shared_2, "Expected permission_dhilipsiva_2 in group_test_dhilipsiva2"
-
-    # permission_dhilipsiva_3 is only in role_2 (group_test_dhilipsiva2)
-    has_perm_3_in_g2 = user.has_permission(test_perm_3, test_group_2)
-    print(f"   has_permission('{test_perm_3}', '{test_group_2}'): {has_perm_3_in_g2}")
-    assert has_perm_3_in_g2, "Expected permission_dhilipsiva_3 in group_test_dhilipsiva2"
-
-    has_perm_3_in_g1 = user.has_permission(test_perm_3, test_group_1)
-    print(f"   has_permission('{test_perm_3}', '{test_group_1}'): {has_perm_3_in_g1}")
-    assert not has_perm_3_in_g1, "Expected permission_dhilipsiva_3 NOT in group_test_dhilipsiva1"
+    # Non-existent permission should be false
+    has_perm_none = user.has_permission(test_perm_nonexistent, test_group)
+    print(f"   has_permission('{test_perm_nonexistent}', '{test_group}'): {has_perm_none}")
+    assert not has_perm_none, f"Expected {test_perm_nonexistent} NOT in {test_group}"
 
     # 7. Check MULTIPLE permissions (Exhaustive & Iterative)
     print("\n   Testing Multi-Permission Checks:")
 
-    # 7a. has_permissions (ALL must exist) - in group_test_dhilipsiva1
-    # group_test_dhilipsiva1 has: permission_dhilipsiva_2, permission_dhilipsiva_1
-    req_perms_all = ["permission_dhilipsiva_1", "permission_dhilipsiva_2"]
-    has_all = user.has_permissions(req_perms_all, test_group_1)
-    print(f"   has_permissions({req_perms_all}, '{test_group_1}'): {has_all}")
-    assert has_all, "Expected all permissions in group_test_dhilipsiva1"
+    # 7a. has_permissions (ALL must exist)
+    req_perms_all = ["agencies.view", "travel.orders.create"]
+    has_all = user.has_permissions(req_perms_all, test_group)
+    print(f"   has_permissions({req_perms_all}, '{test_group}'): {has_all}")
+    assert has_all, "Expected all permissions in group"
 
     # 7b. has_permissions_any (AT LEAST ONE must exist)
-    req_perms_any = ["permission_dhilipsiva_1", "non_existent_perm_99"]
-    has_any = user.has_permissions_any(req_perms_any, test_group_1)
-    print(f"   has_permissions_any({req_perms_any}, '{test_group_1}'): {has_any}")
+    req_perms_any = ["agencies.view", "nonexistent.perm"]
+    has_any = user.has_permissions_any(req_perms_any, test_group)
+    print(f"   has_permissions_any({req_perms_any}, '{test_group}'): {has_any}")
     assert has_any, "Expected at least one permission match"
 
-    # 8. Optional group -- omit group_name (should error since user has 2 groups)
+    # 8. Optional group -- omit group_name (should work since user has only 1 group)
     print("\n   Testing optional group (no group_name passed):")
-    try:
-        result = user.has_permissions_any(["permission_dhilipsiva_1", "other"], None)
-        print(f"   has_permissions_any([...]): {result}")
-        assert False, "Expected ValueError for ambiguous group"
-    except ValueError as e:
-        print(f"   has_permissions_any([...]): ValueError -- {e}")
+    result = user.has_permission("agencies.view", None)
+    print(f"   has_permission('agencies.view', None): {result}")
+    assert result, "Expected permission found when group is inferred (single group)"
 
     # 9. has_group check
-    assert user.has_group(test_group_1), "Expected has_group for group_test_dhilipsiva1"
-    assert user.has_group(test_group_2), "Expected has_group for group_test_dhilipsiva2"
+    assert user.has_group(test_group), f"Expected has_group for {test_group}"
     assert not user.has_group("nonexistent_group"), "Expected no match for nonexistent group"
 
-    # 10. Admin checks
+    # 10. User property checks
     print(f"\n   is_admin: {user.is_admin}")
-    print(f"   is_global_admin: {user.is_global_admin}")
     print(f"   username: {user.username}")
     print(f"   email: {user.email}")
     print(f"   dj_id: {user.dj_id}")
@@ -133,12 +113,13 @@ def test_claims():
     print(f"   get_org_count: {user.get_org_count()}")
     print(f"   get_first_org_short_code: {user.get_first_org_short_code()}")
 
-    assert user.username == "test_user_dhilipsiva"
-    assert user.email == "test_user_dhilipsiva@example.com"
-    assert user.is_admin is False
-    assert user.is_global_admin is False
-    assert user.get_org_count() == 2
-    assert set(user.org_short_codes) == {"group_test_dhilipsiva1", "group_test_dhilipsiva2"}
+    assert user.username == "ishahid0086_ek_gmail_com"
+    assert user.email == "ishahid0086+ek@gmail.com"
+    assert user.is_admin is True
+    assert user.dj_id == "eabeab05-146e-4552-8cc5-3a992be15ea5"
+    assert user.get_org_count() == 1
+    assert user.get_first_org_short_code() == "T-2345"
+    assert user.org_short_codes == ["T-2345"]
 
     print("\nAll assertions passed!")
 

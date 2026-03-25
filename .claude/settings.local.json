@@ -28,7 +28,8 @@
       "Bash(git -C //wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public status)",
       "Bash(git config --global --add safe.directory '%\\(prefix\\)///wsl.localhost/Ubuntu/home/dhilipsiva/projects/nuflights/nf_ndc_connect_public')",
       "Bash(git add .github/workflows/release.yml Cargo.lock Cargo.toml Justfile pyproject.toml src/lib.rs src/auth.rs src/structs.rs src/login.rs src/bindings/mod.rs src/bindings/python.rs src/bindings/wasm.rs test.html test.py)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cargo check:*)"
     ]
   }
 }

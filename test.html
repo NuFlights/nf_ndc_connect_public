@@ -62,7 +62,7 @@
 
                     // 3. Initialize Helper
                     log("Initializing Helper with Public Key...");
-                    const helper = new IdpAuthHelper(publicKey);
+                    const helper = new IdpAuthHelper(publicKey, "connect-development");
                     log("Helper Initialized", "success");
 
                     // 4. Validate JWT & Get User Context
@@ -85,7 +85,7 @@
                     log(`<br><b>User Group Summaries:</b>`);
                     summaries.forEach((s) => {
                         log(
-                            `&nbsp;&nbsp;<b>${s.org_short_code}</b>`,
+                            `&nbsp;&nbsp;<b>${s.group}</b>`,
                         );
                         log(
                             `&nbsp;&nbsp;&nbsp;&nbsp;Role: ${s.role}`,
@@ -96,126 +96,78 @@
                     });
 
                     // Use real values from the sample JWT
-                    // role_dhilipsiva_1 -> group "vinod_test_dev/group_test_dhilipsiva1"
-                    // role_dhilipsiva_2 -> group "vinod_test_dev/group_test_dhilipsiva2"
-                    const testGroup1 = "group_test_dhilipsiva1";
-                    const testGroup2 = "group_test_dhilipsiva2";
-                    const testRole1 = "role_dhilipsiva_1";
-                    const testRole2 = "role_dhilipsiva_2";
-                    const testPerm1 = "permission_dhilipsiva_1"; // role_1 only
-                    const testPerm2 = "permission_dhilipsiva_2"; // both roles
-                    const testPerm3 = "permission_dhilipsiva_3"; // role_2 only
+                    // Single role: account.custom.KEixtFTW
+                    // Single group: connect-development/connect-development_T-2345
+                    // After stripping group_prefix "connect-development_", short code = "T-2345"
+                    const testGroup = "T-2345";
+                    const testRole = "account.custom.KEixtFTW";
+                    const testPerm1 = "agencies.view";
+                    const testPerm2 = "travel.orders.create";
+                    const testPermNone = "nonexistent.permission";
 
                     // 6. Check group membership
-                    const hasGrp1 = user.hasGroup(testGroup1);
+                    const hasGrp = user.hasGroup(testGroup);
                     log(
-                        `<br>hasGroup('${testGroup1}'): <b>${hasGrp1}</b>`,
-                        hasGrp1 ? "success" : "fail",
-                    );
-
-                    const hasGrp2 = user.hasGroup(testGroup2);
-                    log(
-                        `hasGroup('${testGroup2}'): <b>${hasGrp2}</b>`,
-                        hasGrp2 ? "success" : "fail",
+                        `<br>hasGroup('${testGroup}'): <b>${hasGrp}</b>`,
+                        hasGrp ? "success" : "fail",
                     );
 
                     // 7. Check role for a specific group
-                    const hasRole1 = user.hasRole(testRole1, testGroup1);
+                    const hasRole = user.hasRole(testRole, testGroup);
                     log(
-                        `<br>hasRole('${testRole1}', '${testGroup1}'): <b>${hasRole1}</b>`,
-                        hasRole1 ? "success" : "fail",
-                    );
-
-                    const hasRole2 = user.hasRole(testRole2, testGroup2);
-                    log(
-                        `hasRole('${testRole2}', '${testGroup2}'): <b>${hasRole2}</b>`,
-                        hasRole2 ? "success" : "fail",
+                        `<br>hasRole('${testRole}', '${testGroup}'): <b>${hasRole}</b>`,
+                        hasRole ? "success" : "fail",
                     );
 
                     // 8. Check permission for a specific group
-                    const hasPerm1 = user.hasPermission(testPerm1, testGroup1);
+                    const hasPerm1 = user.hasPermission(testPerm1, testGroup);
                     log(
-                        `<br>hasPermission('${testPerm1}', '${testGroup1}'): <b>${hasPerm1}</b>`,
+                        `<br>hasPermission('${testPerm1}', '${testGroup}'): <b>${hasPerm1}</b>`,
                         hasPerm1 ? "success" : "fail",
                     );
 
-                    // permission_dhilipsiva_2 references both roles, available in both groups
-                    const hasPerm2InG1 = user.hasPermission(testPerm2, testGroup1);
+                    const hasPerm2 = user.hasPermission(testPerm2, testGroup);
                     log(
-                        `hasPermission('${testPerm2}', '${testGroup1}'): <b>${hasPerm2InG1}</b>`,
-                        hasPerm2InG1 ? "success" : "fail",
+                        `hasPermission('${testPerm2}', '${testGroup}'): <b>${hasPerm2}</b>`,
+                        hasPerm2 ? "success" : "fail",
                     );
 
-                    const hasPerm2InG2 = user.hasPermission(testPerm2, testGroup2);
+                    // Non-existent permission should be false
+                    const hasPermNone = user.hasPermission(testPermNone, testGroup);
                     log(
-                        `hasPermission('${testPerm2}', '${testGroup2}'): <b>${hasPerm2InG2}</b>`,
-                        hasPerm2InG2 ? "success" : "fail",
-                    );
-
-                    // permission_dhilipsiva_3 only in role_2 (group_test_dhilipsiva2)
-                    const hasPerm3InG2 = user.hasPermission(testPerm3, testGroup2);
-                    log(
-                        `hasPermission('${testPerm3}', '${testGroup2}'): <b>${hasPerm3InG2}</b>`,
-                        hasPerm3InG2 ? "success" : "fail",
-                    );
-
-                    const hasPerm3InG1 = user.hasPermission(testPerm3, testGroup1);
-                    log(
-                        `hasPermission('${testPerm3}', '${testGroup1}'): <b>${hasPerm3InG1}</b> (expected false)`,
-                        !hasPerm3InG1 ? "success" : "fail",
+                        `hasPermission('${testPermNone}', '${testGroup}'): <b>${hasPermNone}</b> (expected false)`,
+                        !hasPermNone ? "success" : "fail",
                     );
 
                     // 9. Check Multiple Permissions
 
                     // 9a. hasPermissions (ALL must exist)
-                    // group_test_dhilipsiva1 has: permission_dhilipsiva_2, permission_dhilipsiva_1
                     const reqPermsAll = [testPerm1, testPerm2];
-                    const hasAll = user.hasPermissions(reqPermsAll, testGroup1);
+                    const hasAll = user.hasPermissions(reqPermsAll, testGroup);
                     log(
-                        `<br>hasPermissions(['${reqPermsAll.join("', '")}'], '${testGroup1}'): <b>${hasAll}</b>`,
+                        `<br>hasPermissions(['${reqPermsAll.join("', '")}'], '${testGroup}'): <b>${hasAll}</b>`,
                         hasAll ? "success" : "fail",
                     );
 
                     // 9b. hasPermissionsAny (AT LEAST ONE must exist)
-                    const reqPermsAny = [testPerm1, "permission_fake_99"];
-                    const hasAny = user.hasPermissionsAny(reqPermsAny, testGroup1);
+                    const reqPermsAny = [testPerm1, "nonexistent.perm"];
+                    const hasAny = user.hasPermissionsAny(reqPermsAny, testGroup);
                     log(
-                        `hasPermissionsAny(['${reqPermsAny.join("', '")}'], '${testGroup1}'): <b>${hasAny}</b>`,
+                        `hasPermissionsAny(['${reqPermsAny.join("', '")}'], '${testGroup}'): <b>${hasAny}</b>`,
                         hasAny ? "success" : "fail",
                     );
 
-                    // 10. Optional group -- omit group_name (should error since user has 2 groups)
+                    // 10. Optional group -- omit group_name (should work since user has only 1 group)
                     log(`<br><b>Testing optional group (null):</b>`);
 
-                    try {
-                        const result = user.hasRole(testRole1, null);
-                        log(
-                            `hasRole('${testRole1}', null): <b>${result}</b>`,
-                            "fail",
-                        );
-                    } catch (e) {
-                        log(
-                            `hasRole('${testRole1}', null): <b>${e.message}</b> (expected error)`,
-                            "warn",
-                        );
-                    }
+                    const resultOptional = user.hasPermission(testPerm1, null);
+                    log(
+                        `hasPermission('${testPerm1}', null): <b>${resultOptional}</b> (expected true, single group inferred)`,
+                        resultOptional ? "success" : "fail",
+                    );
 
-                    try {
-                        const result = user.hasPermissionsAny(["some_perm"], null);
-                        log(
-                            `hasPermissionsAny(['some_perm'], null): <b>${result}</b>`,
-                            "fail",
-                        );
-                    } catch (e) {
-                        log(
-                            `hasPermissionsAny(['some_perm'], null): <b>${e.message}</b> (expected error)`,
-                            "warn",
-                        );
-                    }
-
-                    // 11. Admin checks (Getters on user object)
+                    // 11. User property checks
                     log(`<br>isAdmin: <b>${user.isAdmin}</b>`);
-                    log(`isGlobalAdmin: <b>${user.isGlobalAdmin}</b>`);
                     log(`username: <b>${user.username}</b>`);
                     log(`email: <b>${user.email}</b>`);
                     log(`dj_id: <b>${user.dj_id}</b>`);
