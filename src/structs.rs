@@ -95,9 +95,10 @@ pub struct CasdoorClaims {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GroupAuthSummary {
-    pub group: String,
+    pub group: String, // Django Org model's name
     pub role: String,
     pub permissions: Vec<String>,
+    // pub is_default: bool,
 }
 
 // =============================================================================
@@ -288,7 +289,10 @@ impl CasdoorUser {
         orgs.len()
     }
 
+    /// get_detfault_or_short_code
     pub fn get_first_org_short_code(&self) -> Option<String> {
+        // THere could be multiple default orgs, so please select the first one if it existis.
+        // There could be no orgs as well
         self.summaries.first().map(|s| s.group.clone())
     }
 
