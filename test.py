@@ -5,6 +5,7 @@ from nf_ndc_connect_public import IdpAuthHelper
 # Also test the login function import (feature-gated)
 try:
     from nf_ndc_connect_public import login
+
     HAS_LOGIN = True
 except ImportError:
     HAS_LOGIN = False
@@ -76,7 +77,9 @@ def test_claims():
 
     # Non-existent permission should be false
     has_perm_none = user.has_permission(test_perm_nonexistent, test_group)
-    print(f"   has_permission('{test_perm_nonexistent}', '{test_group}'): {has_perm_none}")
+    print(
+        f"   has_permission('{test_perm_nonexistent}', '{test_group}'): {has_perm_none}"
+    )
     assert not has_perm_none, f"Expected {test_perm_nonexistent} NOT in {test_group}"
 
     # 7. Check MULTIPLE permissions (Exhaustive & Iterative)
@@ -102,7 +105,9 @@ def test_claims():
 
     # 9. has_group check
     assert user.has_group(test_group), f"Expected has_group for {test_group}"
-    assert not user.has_group("nonexistent_group"), "Expected no match for nonexistent group"
+    assert not user.has_group(
+        "nonexistent_group"
+    ), "Expected no match for nonexistent group"
 
     # 10. User property checks
     print(f"\n   is_admin: {user.is_admin}")
@@ -126,7 +131,9 @@ def test_claims():
 
 def test_login():
     if not HAS_LOGIN:
-        print("\nLogin feature not available (built without 'login' feature). Skipping.")
+        print(
+            "\nLogin feature not available (built without 'login' feature). Skipping."
+        )
         return
 
     print("\nLogin function is available.")

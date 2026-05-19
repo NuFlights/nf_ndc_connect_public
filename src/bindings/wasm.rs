@@ -84,6 +84,11 @@ impl WasmCasdoorUser {
         self.inner.get_first_org_short_code()
     }
 
+    #[wasm_bindgen(js_name = getDefaultOrgShortCode)]
+    pub fn get_default_org_short_code(&self) -> Option<String> {
+        self.inner.get_default_org_short_code()
+    }
+
     #[wasm_bindgen(getter = username)]
     pub fn username(&self) -> String {
         self.inner.username()
