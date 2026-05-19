@@ -79,6 +79,10 @@ impl PyCasdoorUser {
         self.inner.get_first_org_short_code()
     }
 
+    pub fn get_default_org_short_code(&self) -> Option<String> {
+        self.inner.get_default_org_short_code()
+    }
+
     #[getter]
     pub fn username(&self) -> String {
         self.inner.username()

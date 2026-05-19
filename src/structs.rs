@@ -75,6 +75,8 @@ pub struct CasdoorClaims {
     pub roles: Vec<CasdoorRole>,
     #[serde(default)]
     pub permissions: Vec<CasdoorPermission>,
+    #[serde(default)]
+    pub groups: Vec<String>,
 
     #[serde(rename = "tokenType")]
     pub token_type: String,
@@ -289,10 +291,12 @@ impl CasdoorUser {
         orgs.len()
     }
 
-    /// get_detfault_or_short_code
+    pub fn get_default_org_short_code(&self) -> Option<String> {
+        self.claims.groups.first().map(|s| s.clone())
+    }
+
+    // NOTE: Should be depricate
     pub fn get_first_org_short_code(&self) -> Option<String> {
-        // THere could be multiple default orgs, so please select the first one if it existis.
-        // There could be no orgs as well
         self.summaries.first().map(|s| s.group.clone())
     }
 
@@ -529,17 +533,11 @@ mod tests {
     #[test]
     fn test_group_prefix_none_no_stripping() {
         let claims = CasdoorClaims {
-            roles: vec![make_role(
-                "admin",
-                vec!["test_org/dev_test1_AIRLINE1"],
-            )],
+            roles: vec![make_role("admin", vec!["test_org/dev_test1_AIRLINE1"])],
             permissions: vec![],
             ..Default::default()
         };
         let user = CasdoorUser::new(claims, "").unwrap();
-        assert_eq!(
-            user.get_org_short_codes(),
-            vec!["dev_test1_AIRLINE1"]
-        );
+        assert_eq!(user.get_org_short_codes(), vec!["dev_test1_AIRLINE1"]);
     }
 }

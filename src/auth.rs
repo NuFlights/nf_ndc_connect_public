@@ -69,9 +69,18 @@ impl AuthHelper {
     /// context object with pre-calculated summaries.
     pub fn parse_user(&self, token: &str) -> Result<CasdoorUser, String> {
         let jwt = Self::extract_jwt(token)?;
-        let claims = decode::<CasdoorClaims>(&jwt, &self.decoding_key, &self.validation)
+        let mut claims = decode::<CasdoorClaims>(&jwt, &self.decoding_key, &self.validation)
             .map(|td| td.claims)
             .map_err(|e| format!("JWT validation failed: {}", e))?;
+
+        // claims.groups
+        let prefix_with_sep = format!("{}_", self.group_prefix);
+        for g in claims.groups.iter_mut() {
+            *g = g
+                .strip_prefix(&prefix_with_sep)
+                .map(|v| v.to_string())
+                .unwrap_or(g.to_string());
+        }
 
         CasdoorUser::new(claims, &self.group_prefix)
     }
