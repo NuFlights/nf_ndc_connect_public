@@ -95,7 +95,7 @@ impl WasmCasdoorUser {
     }
 
     #[wasm_bindgen(getter = lastSigninTime)]
-    pub fn last_signin_time(&self) -> String {
+    pub fn last_signin_time(&self) -> Option<String> {
         self.inner.last_signin_time()
     }
 
