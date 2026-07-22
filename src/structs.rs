@@ -52,6 +52,8 @@ pub struct CasdoorClaims {
     #[serde(default)]
     pub id: Option<String>,
     #[serde(default)]
+    pub last_signin_time: Option<String>,
+    #[serde(default)]
     pub id_card: String,
     #[serde(default)]
     pub email: Option<String>,
@@ -100,7 +102,6 @@ pub struct GroupAuthSummary {
     pub group: String, // Django Org model's name
     pub role: String,
     pub permissions: Vec<String>,
-    // pub is_default: bool,
 }
 
 // =============================================================================
@@ -295,7 +296,10 @@ impl CasdoorUser {
         self.claims.groups.first().map(|s| s.clone())
     }
 
-    // NOTE: Should be depricate
+    #[deprecated(
+        since = "0.17.0",
+        note = "please use `get_default_org_short_code` instead"
+    )]
     pub fn get_first_org_short_code(&self) -> Option<String> {
         self.summaries.first().map(|s| s.group.clone())
     }
@@ -306,6 +310,10 @@ impl CasdoorUser {
 
     pub fn email(&self) -> Option<String> {
         self.claims.email.clone()
+    }
+
+    pub fn last_signin_time(&self) -> Option<String> {
+        self.claims.last_signin_time.clone()
     }
 
     pub fn dj_id(&self) -> String {
@@ -539,5 +547,35 @@ mod tests {
         };
         let user = CasdoorUser::new(claims, "").unwrap();
         assert_eq!(user.get_org_short_codes(), vec!["dev_test1_AIRLINE1"]);
+    }
+
+    #[test]
+    fn test_compute_summaries() {
+        let claims = CasdoorClaims {
+            roles: vec![make_role(
+                "admin",
+                vec!["test_org/dev_test1_AIRLINE1", "test_org/dev_test1_AIRLINE2"],
+            )],
+            permissions: vec![make_permission("read", vec!["test_org/dev_test1_admin"])],
+            ..Default::default()
+        };
+
+        let s = CasdoorUser::compute_summaries(&claims, "dev_test1");
+        let check: Result<Vec<GroupAuthSummary>, String> = Ok(vec![GroupAuthSummary {
+            group: "AIRLINE1".to_string(),
+            role: "admin".to_string(),
+            permissions: vec![],
+        }]);
+
+        assert!(s.is_ok());
+
+        assert_eq!(
+            &check.as_ref().unwrap().first().unwrap().group,
+            &s.as_ref().unwrap().first().unwrap().group
+        );
+        assert_eq!(
+            &check.unwrap().first().unwrap().permissions,
+            &s.unwrap().first().unwrap().permissions
+        );
     }
 }
