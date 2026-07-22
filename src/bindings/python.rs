@@ -94,6 +94,11 @@ impl PyCasdoorUser {
     }
 
     #[getter]
+    pub fn last_signin_time(&self) -> Option<String> {
+        self.inner.last_signin_time()
+    }
+
+    #[getter]
     pub fn dj_id(&self) -> String {
         self.inner.dj_id()
     }

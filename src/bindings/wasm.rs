@@ -94,6 +94,11 @@ impl WasmCasdoorUser {
         self.inner.username()
     }
 
+    #[wasm_bindgen(getter = lastSigninTime)]
+    pub fn last_signin_time(&self) -> String {
+        self.inner.last_signin_time()
+    }
+
     #[wasm_bindgen(getter = email)]
     pub fn email(&self) -> Option<String> {
         self.inner.email()
