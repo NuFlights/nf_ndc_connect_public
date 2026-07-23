@@ -139,7 +139,7 @@ jobs:
         run: |
           wasm-pack build \
             --target web \
-            --scope dhilipsiva \
+            --scope nuflights \
             -- \
             --features wasm
 
